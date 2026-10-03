@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminContext } from "@/lib/admin";
+import { notifyBooking } from "@/lib/notify";
 import { createServiceClient } from "@/lib/supabase/server";
 
 const STATUSES = ["confirmed", "cancelled", "completed", "no_show"] as const;
@@ -42,6 +43,13 @@ export async function PATCH(
       );
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  // サロン側のキャンセルは客にだけ通知する
+  if (status === "cancelled") {
+    await notifyBooking(id, "cancelled", {
+      baseUrl: new URL(req.url).origin,
+      toSalon: false,
+    });
   }
   return NextResponse.json({ ok: true });
 }

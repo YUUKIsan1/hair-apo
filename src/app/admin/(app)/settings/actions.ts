@@ -22,6 +22,7 @@ export async function updateSalon(input: {
   phone: string;
   postal_code: string;
   address: string;
+  notify_email: string;
 }): Promise<Result> {
   const ctx = await requireCtx();
   if (!ctx) return { error: "unauthorized" };
@@ -35,6 +36,7 @@ export async function updateSalon(input: {
       phone: input.phone.trim() || null,
       postal_code: input.postal_code.trim() || null,
       address: input.address.trim() || null,
+      notify_email: input.notify_email.trim() || null,
     })
     .eq("id", ctx.salon.id);
   if (error) return { error: error.message };

@@ -9,6 +9,7 @@ import {
   getStaffForMenu,
   getTimeOff,
 } from "@/lib/queries";
+import { notifyBooking } from "@/lib/notify";
 import { createServiceClient } from "@/lib/supabase/server";
 
 interface BookingBody {
@@ -171,6 +172,10 @@ export async function POST(req: NextRequest) {
       { status: 409 }
     );
   }
+
+  await notifyBooking(appt.id, "confirmed", {
+    baseUrl: new URL(req.url).origin,
+  });
 
   return NextResponse.json({
     appointment: appt,
