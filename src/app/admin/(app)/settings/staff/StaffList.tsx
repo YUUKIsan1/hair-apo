@@ -118,12 +118,12 @@ export default function StaffList({ initial }: { initial: Staff[] }) {
   return (
     <div className="space-y-3">
       {initial.map((s) => (
-        <div key={s.id} className="rounded-xl border hairline bg-card p-4">
+        <div key={s.id} className="rounded-lg border hairline bg-card p-4">
           {editing === s.id ? (
             <StaffEditor staff={s} onDone={() => setEditing(null)} />
           ) : (
             <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-soft font-display text-accent-dark">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-soft font-semibold text-accent-dark">
                 {s.name.slice(0, 1)}
               </div>
               <div className="min-w-0 flex-1">
@@ -162,7 +162,7 @@ export default function StaffList({ initial }: { initial: Staff[] }) {
       ) : (
         <button
           onClick={() => setEditing("new")}
-          className="w-full rounded-xl border border-dashed hairline py-3 text-sm text-mute hover:bg-accent-soft/50 hover:text-ink"
+          className="w-full rounded-lg border border-dashed hairline py-3 text-sm text-mute hover:bg-accent-soft/50 hover:text-ink"
         >
           + スタッフを追加
         </button>
