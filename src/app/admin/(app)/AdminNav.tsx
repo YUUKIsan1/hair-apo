@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/admin", label: "予約台帳" },
   { href: "/admin/new", label: "予約登録" },
+  { href: "/admin/settings", label: "設定" },
 ];
 
 export default function AdminNav() {
