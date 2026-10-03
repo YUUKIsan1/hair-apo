@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { dateLabelJst, dateOnlyJst, timeJst, todayJst } from "@/lib/format";
 import type { Kart } from "@/lib/types";
 import { addKarte, deleteKarte, updateKarte } from "../actions";
@@ -156,6 +156,11 @@ export default function KarteSection({
 
   const prefill = appointments.find((a) => a.id === prefillAppointmentId);
 
+  // 「カルテを書く」リンクで同一ページ内遷移しても追加フォームを開き直す
+  useEffect(() => {
+    if (prefillAppointmentId) setAdding(true);
+  }, [prefillAppointmentId]);
+
   async function run(fn: () => Promise<{ error?: string }>) {
     setBusy(true);
     setError(null);
@@ -186,6 +191,7 @@ export default function KarteSection({
         {adding && (
           <div className="rounded-lg border hairline bg-accent-soft/40 p-4">
             <KarteForm
+              key={prefill?.id ?? "new"}
               appointments={appointments}
               staffList={staffList}
               initial={{

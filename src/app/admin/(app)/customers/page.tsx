@@ -11,10 +11,22 @@ interface CustomerRow {
   phone: string | null;
   email: string | null;
   notes: string | null;
-  appointments: {
-    status: string;
-    starts_at: string;
-  }[];
+}
+
+const PAGE = 1000;
+
+// PostgRESTの行数上限(既定1000)をまたいで全件取る
+async function fetchAll<T>(
+  fetch: (from: number, to: number) => PromiseLike<{ data: T[] | null }>
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await fetch(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    out.push(...data);
+    if (data.length < PAGE) break;
+  }
+  return out;
 }
 
 export default async function CustomersPage({
@@ -27,34 +39,61 @@ export default async function CustomersPage({
   if (!ctx) redirect("/admin/login");
 
   const db = createServiceClient();
-  let query = db
-    .from("customers")
-    .select("id, name, name_kana, phone, email, notes, appointments(status, starts_at)")
-    .eq("salon_id", ctx.salon.id);
-
   const q = params.q?.trim() ?? "";
-  if (q) {
-    const like = `%${q.replace(/[%_\\]/g, "")}%`;
-    query = query.or(
-      `name.ilike.${like},name_kana.ilike.${like},phone.ilike.${like}`
-    );
+  // or()内の値はカンマ・括弧・ドット・引用符が構文と衝突するので除去
+  const qSafe = q.replace(/[%_\\,()."']/g, "");
+  const like = `%${qSafe}%`;
+
+  const [customers, appointments] = await Promise.all([
+    fetchAll<CustomerRow>((from, to) => {
+      let query = db
+        .from("customers")
+        .select("id, name, name_kana, phone, email, notes")
+        .eq("salon_id", ctx.salon.id)
+        .order("name")
+        .range(from, to);
+      if (qSafe) {
+        query = query.or(
+          `name.ilike.${like},name_kana.ilike.${like},phone.ilike.${like}`
+        );
+      }
+      return query;
+    }),
+    fetchAll<{ customer_id: string; status: string; starts_at: string }>(
+      (from, to) =>
+        db
+          .from("appointments")
+          .select("customer_id, status, starts_at")
+          .eq("salon_id", ctx.salon.id)
+          .range(from, to)
+    ),
+  ]);
+
+  const apptsByCustomer = new Map<
+    string,
+    { status: string; starts_at: string }[]
+  >();
+  for (const a of appointments) {
+    const list = apptsByCustomer.get(a.customer_id) ?? [];
+    list.push(a);
+    apptsByCustomer.set(a.customer_id, list);
   }
 
-  const { data } = await query.order("name");
-  const customers = (data ?? []) as CustomerRow[];
-
+  const now = new Date().toISOString();
   const rows = customers
     .map((c) => {
-      const done = c.appointments.filter((a) => a.status === "completed");
-      const lastVisit = done
+      const appts = apptsByCustomer.get(c.id) ?? [];
+      const lastVisit = appts
+        .filter((a) => a.status === "completed")
         .map((a) => a.starts_at)
         .sort()
         .at(-1);
-      const upcoming = c.appointments
-        .filter((a) => a.status === "confirmed")
+      const visits = appts.filter((a) => a.status === "completed").length;
+      const upcoming = appts
+        .filter((a) => a.status === "confirmed" && a.starts_at > now)
         .map((a) => a.starts_at)
         .sort()[0];
-      return { ...c, visits: done.length, lastVisit, upcoming };
+      return { ...c, visits, lastVisit, upcoming };
     })
     .sort((a, b) => (b.lastVisit ?? "").localeCompare(a.lastVisit ?? ""));
 
