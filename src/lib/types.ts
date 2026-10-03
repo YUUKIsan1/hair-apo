@@ -66,6 +66,18 @@ export interface Customer {
   name_kana: string | null;
   email: string | null;
   phone: string | null;
+  notes: string | null;
+}
+
+export interface Kart {
+  id: string;
+  salon_id: string;
+  customer_id: string;
+  appointment_id: string | null;
+  staff_id: string | null;
+  visited_at: string;
+  memo: string | null;
+  photo_urls: string[];
 }
 
 export interface Appointment {

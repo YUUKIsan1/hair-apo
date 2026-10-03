@@ -175,7 +175,14 @@ export default async function AdminLedgerPage({
                     {timeJst(a.starts_at)}–{timeJst(a.ends_at)}
                   </td>
                   <td className="px-4 py-3">
-                    <div>{a.customers?.name}</div>
+                    {a.customers ? (
+                      <Link
+                        href={`/admin/customers/${a.customer_id}`}
+                        className="underline-offset-2 hover:underline"
+                      >
+                        {a.customers.name}
+                      </Link>
+                    ) : null}
                     {a.customers?.phone && (
                       <div className="text-xs text-mute">
                         {a.customers.phone}
