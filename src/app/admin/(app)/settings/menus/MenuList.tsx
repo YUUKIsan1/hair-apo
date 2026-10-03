@@ -34,6 +34,9 @@ function MenuEditor({
   const [duration, setDuration] = useState(menu?.duration_minutes ?? 60);
   const [buffer, setBuffer] = useState(menu?.buffer_minutes ?? 15);
   const [sortOrder, setSortOrder] = useState(menu?.sort_order ?? 0);
+  const [paymentMode, setPaymentMode] = useState<"on_site" | "prepaid">(
+    menu?.payment_mode === "prepaid" ? "prepaid" : "on_site"
+  );
   const [staff, setStaff] = useState<StaffPick[]>(picks);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +56,7 @@ function MenuEditor({
       duration_minutes: duration,
       buffer_minutes: buffer,
       sort_order: sortOrder,
+      payment_mode: paymentMode,
       staff: staff
         .filter((s) => s.checked)
         .map((s) => ({ staff_id: s.staff_id, nominable: s.nominable })),
@@ -114,6 +118,19 @@ function MenuEditor({
             onChange={(e) => setBuffer(Number(e.target.value))}
             className={input}
           />
+        </div>
+        <div>
+          <label className={label}>決済方法</label>
+          <select
+            value={paymentMode}
+            onChange={(e) =>
+              setPaymentMode(e.target.value as "on_site" | "prepaid")
+            }
+            className={input}
+          >
+            <option value="on_site">現地払い</option>
+            <option value="prepaid">事前カード決済</option>
+          </select>
         </div>
         <div>
           <label className={label}>表示順</label>
@@ -242,6 +259,7 @@ export default function MenuList({
                 <p className="mt-0.5 text-xs text-mute">
                   {yen(m.price)} / {m.duration_minutes}分
                   {m.buffer_minutes > 0 && `(+バッファ${m.buffer_minutes}分)`}
+                  {m.payment_mode === "prepaid" && "・事前決済"}
                 </p>
               </div>
               <button

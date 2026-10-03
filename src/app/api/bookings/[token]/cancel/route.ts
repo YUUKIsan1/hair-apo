@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { notifyBooking } from "@/lib/notify";
+import { refundAppointment } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 
 // POST /api/bookings/[token]/cancel — manage_token を持つ人だけがキャンセル可能
@@ -31,6 +32,7 @@ export async function POST(
     .update({ status: "cancelled", updated_at: new Date().toISOString() })
     .eq("id", appt.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await refundAppointment(appt.id);
   await notifyBooking(appt.id, "cancelled", {
     baseUrl: new URL(req.url).origin,
   });
