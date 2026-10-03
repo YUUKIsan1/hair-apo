@@ -37,7 +37,12 @@ export default async function BookPage({
 
   return (
     <BookingFlow
-      salon={{ id: salon.id, slug: salon.slug, name: salon.name }}
+      salon={{
+        id: salon.id,
+        slug: salon.slug,
+        name: salon.name,
+        theme_color: salon.theme_color ?? "#1c1917",
+      }}
       menus={menus}
       staffByMenu={Object.fromEntries(staffByMenu)}
       initialMenuId={initialMenuId ?? null}

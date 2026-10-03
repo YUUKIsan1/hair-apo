@@ -9,6 +9,7 @@ const tabs = [
   { href: "/admin/settings/staff", label: "スタッフ" },
   { href: "/admin/settings/menus", label: "メニュー" },
   { href: "/admin/settings/shifts", label: "シフト・休み" },
+  { href: "/admin/settings/design", label: "ページデザイン" },
 ];
 
 export default function SettingsNav() {

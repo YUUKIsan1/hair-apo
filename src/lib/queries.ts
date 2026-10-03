@@ -11,6 +11,14 @@ import type {
 } from "@/lib/types";
 
 // 公開読み取り(anon key + RLS公開ポリシー)
+export async function getSalons(): Promise<Salon[]> {
+  const { data } = await supabase
+    .from("salons")
+    .select("*")
+    .order("name");
+  return data ?? [];
+}
+
 export async function getSalonBySlug(slug: string): Promise<Salon | null> {
   const { data } = await supabase
     .from("salons")

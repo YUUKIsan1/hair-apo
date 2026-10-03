@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import type { Menu, Staff } from "@/lib/types";
 
@@ -13,7 +13,7 @@ interface Slot {
 }
 
 interface Props {
-  salon: { id: string; slug: string; name: string };
+  salon: { id: string; slug: string; name: string; theme_color: string };
   menus: Menu[];
   staffByMenu: Record<string, Staff[]>;
   initialMenuId: string | null;
@@ -128,7 +128,10 @@ export function BookingFlow({ salon, menus, staffByMenu, initialMenuId }: Props)
   };
 
   return (
-    <main className="mx-auto max-w-2xl px-5 pb-24 pt-8">
+    <main
+      className="mx-auto max-w-2xl px-5 pb-24 pt-8"
+      style={{ "--salon-accent": salon.theme_color } as CSSProperties}
+    >
       {/* ヘッダ */}
       <div className="flex items-center justify-between">
         <Link href={`/s/${salon.slug}`} className="text-[13px] text-[var(--color-mute)]">
@@ -144,7 +147,7 @@ export function BookingFlow({ salon, menus, staffByMenu, initialMenuId }: Props)
               <span
                 className={`flex h-6 w-6 items-center justify-center rounded-full border hairline ${
                   i <= stepIndex
-                    ? "bg-[var(--color-ink)] text-[var(--color-paper)]"
+                    ? "bg-[var(--salon-accent)] text-[var(--color-paper)]"
                     : "text-[var(--color-mute)]"
                 }`}
               >
@@ -238,7 +241,7 @@ export function BookingFlow({ salon, menus, staffByMenu, initialMenuId }: Props)
                 }}
                 className={`shrink-0 rounded-lg border px-4 py-2 text-[13px] transition ${
                   date === d
-                    ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)]"
+                    ? "border-[var(--salon-accent)] bg-[var(--salon-accent)] text-[var(--color-paper)]"
                     : "hairline text-[var(--color-mute)] hover:bg-[var(--color-accent-soft)]"
                 }`}
               >
@@ -267,7 +270,7 @@ export function BookingFlow({ salon, menus, staffByMenu, initialMenuId }: Props)
                   onClick={() => setSlot(s)}
                   className={`rounded-lg border py-2.5 text-center text-[14px] transition ${
                     slot?.start === s.start
-                      ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)]"
+                      ? "border-[var(--salon-accent)] bg-[var(--salon-accent)] text-[var(--color-paper)]"
                       : "hairline hover:bg-[var(--color-accent-soft)]"
                   }`}
                 >
@@ -408,7 +411,7 @@ function PrimaryButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="mt-8 w-full rounded-lg bg-[var(--color-ink)] py-4 text-[15px] font-medium text-white transition enabled:hover:opacity-85 disabled:opacity-40"
+      className="mt-8 w-full rounded-lg bg-[var(--salon-accent)] py-4 text-[15px] font-medium text-white transition enabled:hover:opacity-85 disabled:opacity-40"
     >
       {children}
     </button>
@@ -431,7 +434,7 @@ function SelectCard({
       onClick={onClick}
       className={`w-full rounded-lg border p-4 text-left transition ${
         selected
-          ? "border-[var(--color-ink)] bg-[var(--color-accent-soft)]"
+          ? "border-[var(--salon-accent)] bg-[var(--color-accent-soft)]"
           : "hairline bg-[var(--color-card)] hover:bg-[var(--color-accent-soft)]/50"
       }`}
     >

@@ -11,10 +11,10 @@ export default function Home() {
       </p>
       <div className="mt-10">
         <Link
-          href="/s/theater"
+          href="/s"
           className="inline-block rounded-lg bg-[var(--color-ink)] px-6 py-3 text-[14px] font-medium text-white transition hover:opacity-85"
         >
-          デモ: THEATER の予約ページを見る
+          サロンを探す
         </Link>
       </div>
     </main>

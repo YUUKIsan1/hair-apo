@@ -380,3 +380,105 @@ export async function deleteTimeOff(id: string): Promise<Result> {
   revalidatePath("/admin/settings/shifts");
   return {};
 }
+
+// ---- ページデザイン ----
+
+const TEMPLATES = ["photo", "card", "simple"] as const;
+
+export async function updateSalonDesign(input: {
+  template: string;
+  theme_color: string;
+}): Promise<Result> {
+  const ctx = await requireCtx();
+  if (!ctx) return { error: "unauthorized" };
+  if (!(TEMPLATES as readonly string[]).includes(input.template)) {
+    return { error: "テンプレートが不正です" };
+  }
+  if (!/^#[0-9a-fA-F]{6}$/.test(input.theme_color)) {
+    return { error: "カラーは #RRGGBB 形式で指定してください" };
+  }
+
+  const { error } = await createServiceClient()
+    .from("salons")
+    .update({ template: input.template, theme_color: input.theme_color })
+    .eq("id", ctx.salon.id);
+  if (error) return { error: error.message };
+  revalidatePath("/admin/settings/design");
+  revalidatePath(`/s/${ctx.salon.slug}`);
+  return {};
+}
+
+const IMAGE_TYPES: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+// 宣言MIMEだけでなく先頭バイトも検査する
+function isRealImage(buf: Uint8Array, type: string): boolean {
+  if (type === "image/jpeg") return buf[0] === 0xff && buf[1] === 0xd8;
+  if (type === "image/png")
+    return (
+      buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47
+    );
+  if (type === "image/webp")
+    return (
+      buf.length > 11 &&
+      buf[0] === 0x52 && // R
+      buf[1] === 0x49 && // I
+      buf[2] === 0x46 && // F
+      buf[3] === 0x46 && // F
+      buf[8] === 0x57 && // W
+      buf[9] === 0x45 && // E
+      buf[10] === 0x42 && // B
+      buf[11] === 0x50 // P
+    );
+  return false;
+}
+
+export async function uploadHeroImage(formData: FormData): Promise<Result> {
+  const ctx = await requireCtx();
+  if (!ctx) return { error: "unauthorized" };
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { error: "ファイルを選択してください" };
+  const ext = IMAGE_TYPES[file.type];
+  if (!ext) return { error: "JPEG / PNG / WebP のみアップロードできます" };
+  if (file.size > IMAGE_MAX_BYTES) {
+    return { error: "5MB以下の画像を選択してください" };
+  }
+  const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  if (!isRealImage(head, file.type)) {
+    return { error: "画像ファイルが壊れているか形式が一致しません" };
+  }
+
+  const db = createServiceClient();
+  const path = `${ctx.salon.id}/hero-${Date.now()}.${ext}`;
+  const { error: upErr } = await db.storage
+    .from("salon-assets")
+    .upload(path, file, { contentType: file.type });
+  if (upErr) return { error: upErr.message };
+
+  const {
+    data: { publicUrl },
+  } = db.storage.from("salon-assets").getPublicUrl(path);
+  const { error } = await db
+    .from("salons")
+    .update({ hero_image_url: publicUrl })
+    .eq("id", ctx.salon.id);
+  if (error) return { error: error.message };
+
+  // 差し替えで古い画像が溜まらないよう掃除(失敗しても本体は成功させる)
+  const prefix = "/storage/v1/object/public/salon-assets/";
+  const oldUrl = ctx.salon.hero_image_url;
+  if (oldUrl?.includes(prefix)) {
+    const oldPath = oldUrl.slice(oldUrl.indexOf(prefix) + prefix.length);
+    if (oldPath.startsWith(`${ctx.salon.id}/`)) {
+      await db.storage.from("salon-assets").remove([oldPath]);
+    }
+  }
+
+  revalidatePath("/admin/settings/design");
+  revalidatePath(`/s/${ctx.salon.slug}`);
+  return {};
+}
