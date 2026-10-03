@@ -99,5 +99,6 @@ export interface Appointment {
   payment_mode: "prepaid" | "card_on_file" | "on_site";
   customer_note: string | null;
   manage_token: string;
+  reminder_sent_at: string | null;
   created_at: string;
 }
