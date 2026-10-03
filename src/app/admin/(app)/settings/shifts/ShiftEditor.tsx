@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { dateLabelJst, timeJst } from "@/lib/format";
+import { useEffect, useState } from "react";
+import { dateLabelJst, dateOnlyJst, timeJst } from "@/lib/format";
 import type { Shift } from "@/lib/types";
 import { addTimeOff, deleteTimeOff, saveShifts } from "../actions";
 
@@ -44,6 +44,9 @@ export default function ShiftEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  // ブラウザの戻る/進むでスタッフが切り替わった時も編集中の行を破棄する
+  useEffect(() => setRows(null), [selectedStaffId]);
 
   // 時間休フォーム
   const [offStaff, setOffStaff] = useState<string>("");
@@ -203,7 +206,7 @@ export default function ShiftEditor({
             {timeOffs.map((t) => (
               <li key={t.id} className="flex items-center gap-3 py-2.5 text-sm">
                 <span className="font-medium">
-                  {dateLabelJst(t.starts_at.slice(0, 10))}
+                  {dateLabelJst(dateOnlyJst(t.starts_at))}
                 </span>
                 <span className="tabular-nums text-mute">
                   {timeJst(t.starts_at)}〜{timeJst(t.ends_at)}

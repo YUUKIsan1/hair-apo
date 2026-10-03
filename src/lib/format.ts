@@ -17,6 +17,16 @@ export function timeJst(iso: string): string {
   }).format(new Date(iso));
 }
 
+// ISO時刻のJST日付部分("YYYY-MM-DD")
+export function dateOnlyJst(iso: string): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}
+
 // "2026年10月5日(月)" 形式
 export function dateLabelJst(date: string): string {
   return new Intl.DateTimeFormat("ja-JP", {

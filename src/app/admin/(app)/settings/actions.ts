@@ -60,17 +60,27 @@ export async function saveBusinessHours(
   }
 
   const db = createServiceClient();
-  const { error: delErr } = await db
-    .from("business_hours")
-    .delete()
-    .eq("salon_id", ctx.salon.id);
-  if (delErr) return { error: delErr.message };
+  // 先に新しい行を書き込み、残っていない曜日だけ後から消す。
+  // delete→insert の順だと insert 失敗時に営業時間が全部消える
   if (rows.length > 0) {
     const { error } = await db
       .from("business_hours")
-      .insert(rows.map((r) => ({ ...r, salon_id: ctx.salon.id })));
+      .upsert(
+        rows.map((r) => ({ ...r, salon_id: ctx.salon.id })),
+        { onConflict: "salon_id,day_of_week" }
+      );
     if (error) return { error: error.message };
   }
+  let del = db.from("business_hours").delete().eq("salon_id", ctx.salon.id);
+  if (rows.length > 0) {
+    del = del.not(
+      "day_of_week",
+      "in",
+      `(${rows.map((r) => r.day_of_week).join(",")})`
+    );
+  }
+  const { error: delErr } = await del;
+  if (delErr) return { error: delErr.message };
   revalidatePath("/admin/settings/hours");
   revalidatePath(`/s/${ctx.salon.slug}`);
   return {};
@@ -122,13 +132,18 @@ export async function upsertStaff(input: {
       .select("id")
       .eq("salon_id", ctx.salon.id);
     if (menus && menus.length > 0) {
-      await db.from("staff_menus").insert(
+      const { error: smErr } = await db.from("staff_menus").insert(
         menus.map((m) => ({
           staff_id: created.id,
           menu_id: m.id,
           nominable: true,
         }))
       );
+      if (smErr) {
+        // メニュー割当なしのスタッフが残らないようロールバック
+        await db.from("staff").delete().eq("id", created.id);
+        return { error: smErr.message };
+      }
     }
   }
   revalidatePath("/admin/settings/staff");
@@ -215,6 +230,10 @@ export async function upsertMenu(input: {
     .eq("salon_id", ctx.salon.id)
     .eq("is_active", true);
   const activeIds = (activeStaff ?? []).map((s) => s.id);
+  // 他店舗・非表示スタッフのIDを送りつけられても割り当てない
+  if (input.staff.some((s) => !activeIds.includes(s.staff_id))) {
+    return { error: "担当者にこの店舗の有効なスタッフ以外が含まれています" };
+  }
   if (activeIds.length > 0) {
     const { error: delErr } = await db
       .from("staff_menus")
@@ -281,17 +300,26 @@ export async function saveShifts(
     .maybeSingle();
   if (!staff) return { error: "staff not found" };
 
-  const { error: delErr } = await db
+  const { data: oldShifts, error: oldErr } = await db
     .from("shifts")
-    .delete()
+    .select("id")
     .eq("staff_id", staffId)
     .not("day_of_week", "is", null);
-  if (delErr) return { error: delErr.message };
+  if (oldErr) return { error: oldErr.message };
+  // 先に新しい行を入れ、旧行はid指定で後から消す。
+  // delete→insert の順だと insert 失敗時に週間シフトが全部消える
   if (rows.length > 0) {
     const { error } = await db
       .from("shifts")
       .insert(rows.map((r) => ({ ...r, staff_id: staffId })));
     if (error) return { error: error.message };
+  }
+  if (oldShifts && oldShifts.length > 0) {
+    const { error: delErr } = await db
+      .from("shifts")
+      .delete()
+      .in("id", oldShifts.map((s) => s.id));
+    if (delErr) return { error: delErr.message };
   }
   revalidatePath("/admin/settings/shifts");
   return {};
@@ -318,7 +346,17 @@ export async function addTimeOff(input: {
     return { error: "終了時刻は開始時刻より後にしてください" };
   }
 
-  const { error } = await createServiceClient().from("time_off").insert({
+  const db = createServiceClient();
+  if (input.staff_id) {
+    const { data: st } = await db
+      .from("staff")
+      .select("id")
+      .eq("id", input.staff_id)
+      .eq("salon_id", ctx.salon.id)
+      .maybeSingle();
+    if (!st) return { error: "staff not found" };
+  }
+  const { error } = await db.from("time_off").insert({
     salon_id: ctx.salon.id,
     staff_id: input.staff_id,
     starts_at: `${input.date}T${input.start_time}:00+09:00`,
