@@ -174,7 +174,7 @@ export default function KarteSection({
   }
 
   return (
-    <section className="rounded-xl border hairline bg-card">
+    <section className="rounded-lg border hairline bg-card">
       <div className="flex items-center justify-between border-b hairline px-5 py-3">
         <h2 className="text-sm font-medium">カルテ({kartes.length})</h2>
         {!adding && (

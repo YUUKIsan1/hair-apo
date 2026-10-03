@@ -7,7 +7,7 @@ export default async function SettingsSalonPage() {
   if (!ctx) redirect("/admin/login");
 
   return (
-    <div className="rounded-xl border hairline bg-card p-6">
+    <div className="rounded-lg border hairline bg-card p-6">
       <SalonForm
         initial={{
           name: ctx.salon.name,

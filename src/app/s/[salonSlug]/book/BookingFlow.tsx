@@ -134,9 +134,8 @@ export function BookingFlow({ salon, menus, staffByMenu, initialMenuId }: Props)
         <Link href={`/s/${salon.slug}`} className="text-[13px] text-[var(--color-mute)]">
           ← {salon.name}
         </Link>
-        <span className="eyebrow">reservation</span>
       </div>
-      <h1 className="font-display mt-4 text-2xl">ご予約</h1>
+      <h1 className="mt-4 text-xl font-bold">ご予約</h1>
 
       {step !== "done" && (
         <ol className="mt-6 flex items-center gap-2 text-[11px]">
@@ -186,7 +185,7 @@ export function BookingFlow({ salon, menus, staffByMenu, initialMenuId }: Props)
                     {m.description && ` / ${m.description}`}
                   </p>
                 </div>
-                <p className="font-display text-lg">{yen(m.price)}</p>
+                <p className="text-base font-semibold tabular-nums">{yen(m.price)}</p>
                 <span className="text-[var(--color-mute)]">›</span>
               </button>
             </li>
@@ -237,7 +236,7 @@ export function BookingFlow({ salon, menus, staffByMenu, initialMenuId }: Props)
                   setDate(d);
                   setSlot(null);
                 }}
-                className={`shrink-0 rounded-full border px-4 py-2 text-[13px] transition ${
+                className={`shrink-0 rounded-lg border px-4 py-2 text-[13px] transition ${
                   date === d
                     ? "border-[var(--color-ink)] bg-[var(--color-ink)] text-[var(--color-paper)]"
                     : "hairline text-[var(--color-mute)] hover:bg-[var(--color-accent-soft)]"
@@ -288,7 +287,7 @@ export function BookingFlow({ salon, menus, staffByMenu, initialMenuId }: Props)
         <div className="mt-8">
           <BackButton onClick={() => setStep("datetime")} label="日時を変更" />
 
-          <div className="mt-4 rounded-xl border hairline bg-[var(--color-card)] p-5 text-[14px]">
+          <div className="mt-4 rounded-lg border hairline bg-[var(--color-card)] p-5 text-[14px]">
             <dl className="space-y-2">
               <Row k="店舗" v={salon.name} />
               <Row k="メニュー" v={`${menu.name} / ${yen(menu.price)}(税込)`} />
@@ -362,14 +361,14 @@ export function BookingFlow({ salon, menus, staffByMenu, initialMenuId }: Props)
       {/* 完了 */}
       {step === "done" && (
         <div className="mt-10 text-center">
-          <p className="font-display text-2xl">ご予約ありがとうございます</p>
+          <p className="text-2xl font-bold">ご予約ありがとうございます</p>
           <p className="mt-4 text-[14px] leading-7 text-[var(--color-mute)]">
             予約が確定しました。確認・キャンセルは以下のリンクから行えます。
           </p>
           {manageUrl && (
             <Link
               href={manageUrl}
-              className="mt-6 inline-block rounded-full border border-[var(--color-accent)] px-6 py-3 text-[14px] text-[var(--color-accent-dark)] hover:bg-[var(--color-accent-soft)]"
+              className="mt-6 inline-block rounded-lg border hairline bg-[var(--color-card)] px-6 py-3 text-[14px] hover:bg-[var(--color-accent-soft)]"
             >
               予約内容を確認する
             </Link>
@@ -409,7 +408,7 @@ function PrimaryButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="mt-8 w-full rounded-full bg-[var(--color-ink)] py-4 text-[15px] font-medium text-[var(--color-paper)] transition enabled:hover:opacity-85 disabled:opacity-40"
+      className="mt-8 w-full rounded-lg bg-[var(--color-ink)] py-4 text-[15px] font-medium text-white transition enabled:hover:opacity-85 disabled:opacity-40"
     >
       {children}
     </button>
@@ -430,7 +429,7 @@ function SelectCard({
   return (
     <button
       onClick={onClick}
-      className={`w-full rounded-xl border p-4 text-left transition ${
+      className={`w-full rounded-lg border p-4 text-left transition ${
         selected
           ? "border-[var(--color-ink)] bg-[var(--color-accent-soft)]"
           : "hairline bg-[var(--color-card)] hover:bg-[var(--color-accent-soft)]/50"

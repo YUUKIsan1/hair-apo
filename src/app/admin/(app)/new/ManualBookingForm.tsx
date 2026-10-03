@@ -104,7 +104,7 @@ export default function ManualBookingForm({
   if (done) {
     return (
       <div className="py-6 text-center">
-        <p className="font-display text-lg">予約を登録しました</p>
+        <p className="text-lg font-semibold">予約を登録しました</p>
         <p className="mt-2 text-sm text-mute">
           {name} 様 / {slot.slice(11, 16)}〜
         </p>

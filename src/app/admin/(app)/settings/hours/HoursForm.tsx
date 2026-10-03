@@ -70,7 +70,7 @@ export default function HoursForm({
                 type="checkbox"
                 checked={!r.open}
                 onChange={(e) => patch(r.day_of_week, { open: !e.target.checked })}
-                className="accent-[#9a7b4f]"
+                className="accent-neutral-700"
               />
               休み
             </label>

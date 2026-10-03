@@ -120,7 +120,7 @@ export default function ShiftEditor({
 
   return (
     <div className="space-y-8">
-      <section className="rounded-xl border hairline bg-card p-6">
+      <section className="rounded-lg border hairline bg-card p-6">
         <h2 className="text-sm font-medium">曜日ごとのシフト</h2>
         <div className="mt-3 flex flex-wrap gap-2">
           {staffList.map((s) => (
@@ -153,7 +153,7 @@ export default function ShiftEditor({
                       onChange={(e) =>
                         patch(r.day_of_week, { work: !e.target.checked })
                       }
-                      className="accent-[#9a7b4f]"
+                      className="accent-neutral-700"
                     />
                     休み
                   </label>
@@ -196,13 +196,13 @@ export default function ShiftEditor({
         )}
       </section>
 
-      <section className="rounded-xl border hairline bg-card p-6">
+      <section className="rounded-lg border hairline bg-card p-6">
         <h2 className="text-sm font-medium">休み・時間外の設定</h2>
         <p className="mt-1 text-xs text-mute">
           特定の日時を予約不可にします。スタッフ未選択なら店舗全体の休みです。
         </p>
         {timeOffs.length > 0 && (
-          <ul className="mt-3 divide-y divide-[#e6ded0]">
+          <ul className="mt-3 divide-y divide-[var(--color-line)]">
             {timeOffs.map((t) => (
               <li key={t.id} className="flex items-center gap-3 py-2.5 text-sm">
                 <span className="font-medium">

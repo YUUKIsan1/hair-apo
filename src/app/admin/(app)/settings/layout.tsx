@@ -7,8 +7,7 @@ export default function SettingsLayout({
 }) {
   return (
     <div>
-      <p className="eyebrow">Settings</p>
-      <h1 className="font-display mt-1 text-2xl">店舗設定</h1>
+      <h1 className="text-xl font-bold">店舗設定</h1>
       <div className="mt-4 border-b hairline">
         <SettingsNav />
       </div>

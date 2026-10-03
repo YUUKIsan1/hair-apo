@@ -100,10 +100,7 @@ export default async function CustomersPage({
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow">Customers</p>
-          <h1 className="font-display mt-1 text-2xl">顧客一覧</h1>
-        </div>
+        <h1 className="text-xl font-bold">顧客一覧</h1>
         <form action="/admin/customers" className="flex items-center gap-1">
           <input
             type="search"
@@ -118,7 +115,7 @@ export default async function CustomersPage({
         </form>
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-xl border hairline bg-card">
+      <div className="mt-4 overflow-x-auto rounded-lg border hairline bg-card">
         {rows.length === 0 ? (
           <p className="px-6 py-12 text-center text-sm text-mute">
             {q ? "該当する顧客がいません" : "顧客がまだ登録されていません"}
