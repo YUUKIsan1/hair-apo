@@ -47,12 +47,11 @@ export default async function SalonPage({
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 mx-auto max-w-3xl px-6 pb-8">
-          <p className="eyebrow !text-white/70">hair salon</p>
-          <h1 className="font-display mt-2 text-4xl text-white sm:text-5xl">
+          <h1 className="text-3xl font-bold tracking-wide text-white sm:text-4xl">
             {salon.name}
           </h1>
           {salon.address && (
-            <p className="mt-3 text-sm text-white/80">{salon.address}</p>
+            <p className="mt-2 text-sm text-white/80">{salon.address}</p>
           )}
         </div>
       </div>
@@ -69,10 +68,7 @@ export default async function SalonPage({
 
         {/* メニュー */}
         <section className="border-b hairline py-10">
-          <div className="flex items-baseline justify-between">
-            <h2 className="font-display text-xl">メニュー</h2>
-            <span className="eyebrow">menu</span>
-          </div>
+          <h2 className="text-lg font-bold">メニュー</h2>
           <ul className="mt-6 divide-y divide-[var(--color-line)]">
             {menus.map((m) => (
               <li key={m.id} className="flex items-center gap-4 py-5">
@@ -87,7 +83,7 @@ export default async function SalonPage({
                     {m.duration_minutes}分
                   </p>
                 </div>
-                <p className="shrink-0 font-display text-lg">
+                <p className="shrink-0 text-base font-semibold tabular-nums">
                   {yen(m.price)}
                   <span className="ml-1 text-[11px] text-[var(--color-mute)]">
                     税込
@@ -95,7 +91,7 @@ export default async function SalonPage({
                 </p>
                 <Link
                   href={`/s/${salon.slug}/book?menu=${m.id}`}
-                  className="shrink-0 rounded-full border border-[var(--color-accent)] px-4 py-1.5 text-[13px] text-[var(--color-accent-dark)] transition hover:bg-[var(--color-accent-soft)]"
+                  className="shrink-0 rounded-md bg-[var(--color-ink)] px-4 py-1.5 text-[13px] font-medium text-white transition hover:opacity-85"
                 >
                   予約
                 </Link>
@@ -106,17 +102,14 @@ export default async function SalonPage({
 
         {/* スタッフ */}
         <section className="border-b hairline py-10">
-          <div className="flex items-baseline justify-between">
-            <h2 className="font-display text-xl">スタッフ</h2>
-            <span className="eyebrow">staff</span>
-          </div>
+          <h2 className="text-lg font-bold">スタッフ</h2>
           <ul className="mt-6 grid gap-5 sm:grid-cols-2">
             {staff.map((s) => (
               <li
                 key={s.id}
-                className="flex items-start gap-4 rounded-xl border hairline bg-[var(--color-card)] p-5"
+                className="flex items-start gap-4 rounded-lg border hairline bg-[var(--color-card)] p-5"
               >
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent-soft)] font-display text-lg text-[var(--color-accent-dark)]">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent-soft)] text-lg font-semibold text-[var(--color-accent-dark)]">
                   {s.name.slice(0, 1)}
                 </div>
                 <div className="min-w-0">
@@ -139,10 +132,7 @@ export default async function SalonPage({
 
         {/* 店舗情報 */}
         <section className="py-10">
-          <div className="flex items-baseline justify-between">
-            <h2 className="font-display text-xl">店舗情報</h2>
-            <span className="eyebrow">info</span>
-          </div>
+          <h2 className="text-lg font-bold">店舗情報</h2>
           <dl className="mt-6 divide-y divide-[var(--color-line)] border-y hairline text-[14px]">
             <div className="grid grid-cols-[6rem_1fr] gap-4 py-3">
               <dt className="text-[var(--color-mute)]">住所</dt>
@@ -199,7 +189,7 @@ export default async function SalonPage({
           </div>
           <Link
             href={`/s/${salon.slug}/book`}
-            className="rounded-full bg-[var(--color-ink)] px-6 py-3 text-[14px] font-medium text-[var(--color-paper)] transition hover:opacity-85"
+            className="rounded-lg bg-[var(--color-ink)] px-6 py-3 text-[14px] font-medium text-white transition hover:opacity-85"
           >
             予約する
           </Link>

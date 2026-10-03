@@ -26,7 +26,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_STYLE: Record<string, string> = {
-  confirmed: "bg-accent-soft text-accent-dark",
+  confirmed: "bg-blue-50 text-blue-700",
   completed: "bg-emerald-50 text-emerald-800",
   cancelled: "bg-neutral-100 text-neutral-500",
   no_show: "bg-red-50 text-red-700",
@@ -78,10 +78,7 @@ export default async function AdminLedgerPage({
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow">Reservations</p>
-          <h1 className="font-display mt-1 text-2xl">{dateLabelJst(date)}</h1>
-        </div>
+        <h1 className="text-xl font-bold">{dateLabelJst(date)}</h1>
         <div className="flex items-center gap-2 text-sm">
           <Link
             href={`/admin?date=${prev}${params.staff ? `&staff=${params.staff}` : ""}`}
@@ -143,7 +140,7 @@ export default async function AdminLedgerPage({
         </span>
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-xl border hairline bg-card">
+      <div className="mt-4 overflow-x-auto rounded-lg border hairline bg-card">
         {rows.length === 0 ? (
           <p className="px-6 py-12 text-center text-sm text-mute">
             この日の予約はありません

@@ -40,8 +40,7 @@ export default async function ManageBookingPage({
 
   return (
     <main className="mx-auto max-w-xl px-5 pb-24 pt-10">
-      <p className="eyebrow">reservation</p>
-      <h1 className="font-display mt-2 text-2xl">ご予約内容</h1>
+      <h1 className="text-xl font-bold">ご予約内容</h1>
 
       {cancelled ? (
         <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">

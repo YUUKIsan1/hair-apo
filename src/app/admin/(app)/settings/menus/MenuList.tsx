@@ -145,7 +145,7 @@ function MenuEditor({
                           : false,
                       })
                     }
-                    className="accent-[#9a7b4f]"
+                    className="accent-neutral-700"
                   />
                   {s.name}
                 </label>
@@ -157,7 +157,7 @@ function MenuEditor({
                     onChange={(e) =>
                       patchStaff(s.id, { nominable: e.target.checked })
                     }
-                    className="accent-[#9a7b4f]"
+                    className="accent-neutral-700"
                   />
                   指名可
                 </label>
@@ -220,7 +220,7 @@ export default function MenuList({
   return (
     <div className="space-y-3">
       {initial.map((m) => (
-        <div key={m.id} className="rounded-xl border hairline bg-card p-4">
+        <div key={m.id} className="rounded-lg border hairline bg-card p-4">
           {editing === m.id ? (
             <MenuEditor
               menu={m}
@@ -271,7 +271,7 @@ export default function MenuList({
       ) : (
         <button
           onClick={() => setEditing("new")}
-          className="w-full rounded-xl border border-dashed hairline py-3 text-sm text-mute hover:bg-accent-soft/50 hover:text-ink"
+          className="w-full rounded-lg border border-dashed hairline py-3 text-sm text-mute hover:bg-accent-soft/50 hover:text-ink"
         >
           + メニューを追加
         </button>

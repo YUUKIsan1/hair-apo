@@ -25,7 +25,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_STYLE: Record<string, string> = {
-  confirmed: "bg-accent-soft text-accent-dark",
+  confirmed: "bg-blue-50 text-blue-700",
   completed: "bg-emerald-50 text-emerald-800",
   cancelled: "bg-neutral-100 text-neutral-500",
   no_show: "bg-red-50 text-red-700",
@@ -84,13 +84,13 @@ export default async function CustomerDetailPage({
 
       <div className="mt-3 grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-1">
-          <div className="rounded-xl border hairline bg-card p-5">
+          <div className="rounded-lg border hairline bg-card p-5">
             <CustomerForm customer={customer} />
           </div>
         </div>
 
         <div className="space-y-4 lg:col-span-2">
-          <section className="rounded-xl border hairline bg-card">
+          <section className="rounded-lg border hairline bg-card">
             <h2 className="border-b hairline px-5 py-3 text-sm font-medium">
               来店履歴
             </h2>

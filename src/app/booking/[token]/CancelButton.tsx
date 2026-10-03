@@ -27,7 +27,7 @@ export function CancelButton({ token }: { token: string }) {
     return (
       <button
         onClick={() => setConfirming(true)}
-        className="w-full rounded-full border hairline py-3.5 text-[14px] text-[var(--color-mute)] transition hover:bg-[var(--color-accent-soft)]"
+        className="w-full rounded-lg border hairline py-3.5 text-[14px] text-[var(--color-mute)] transition hover:bg-[var(--color-accent-soft)]"
       >
         この予約をキャンセルする
       </button>
@@ -35,21 +35,21 @@ export function CancelButton({ token }: { token: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-center">
+    <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-center">
       <p className="text-[13px] text-red-700">
         本当にキャンセルしますか?この操作は取り消せません。
       </p>
       <div className="mt-4 flex gap-3">
         <button
           onClick={() => setConfirming(false)}
-          className="flex-1 rounded-full border hairline bg-white py-3 text-[14px]"
+          className="flex-1 rounded-lg border hairline bg-white py-3 text-[14px]"
         >
           戻る
         </button>
         <button
           onClick={cancel}
           disabled={loading}
-          className="flex-1 rounded-full bg-red-600 py-3 text-[14px] font-medium text-white disabled:opacity-50"
+          className="flex-1 rounded-lg bg-red-600 py-3 text-[14px] font-medium text-white disabled:opacity-50"
         >
           {loading ? "処理中…" : "キャンセルする"}
         </button>

@@ -2,17 +2,16 @@
 
 @theme {
   --font-sans: var(--font-noto-sans), "Noto Sans JP", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
-  --font-serif: var(--font-shippori), "Shippori Mincho B1", "Hiragino Mincho ProN", serif;
 
-  /* 紙・墨・金茶のサロンパレット */
-  --color-paper: #faf7f2;
+  /* ニュートラル基調の業務ツールパレット */
+  --color-paper: #f5f5f4;
   --color-card: #ffffff;
-  --color-ink: #1d1a16;
-  --color-mute: #877e72;
-  --color-line: #e6ded0;
-  --color-accent: #9a7b4f;
-  --color-accent-dark: #6d5736;
-  --color-accent-soft: #f3ecdf;
+  --color-ink: #1c1917;
+  --color-mute: #78716c;
+  --color-line: #e7e5e4;
+  --color-accent: #44403c;
+  --color-accent-dark: #292524;
+  --color-accent-soft: #e7e5e4;
 }
 
 body {
@@ -20,19 +19,6 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-}
-
-.font-display {
-  font-family: var(--font-serif);
-  letter-spacing: 0.08em;
-}
-
-/* 細いラベル文字 */
-.eyebrow {
-  font-size: 11px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--color-mute);
 }
 
 .hairline {
