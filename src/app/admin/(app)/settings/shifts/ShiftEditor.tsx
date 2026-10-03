@@ -52,6 +52,7 @@ export default function ShiftEditor({
   const [offEnd, setOffEnd] = useState("20:00");
   const [offReason, setOffReason] = useState("");
   const [offBusy, setOffBusy] = useState(false);
+  const [offError, setOffError] = useState<string | null>(null);
 
   const current: Row[] =
     rows ??
@@ -97,6 +98,7 @@ export default function ShiftEditor({
   async function submitTimeOff(e: React.FormEvent) {
     e.preventDefault();
     setOffBusy(true);
+    setOffError(null);
     const res = await addTimeOff({
       staff_id: offStaff || null,
       date: offDate,
@@ -105,7 +107,7 @@ export default function ShiftEditor({
       reason: offReason,
     });
     setOffBusy(false);
-    if (res.error) setError(res.error);
+    if (res.error) setOffError(res.error);
     else {
       setOffDate("");
       setOffReason("");
@@ -288,6 +290,11 @@ export default function ShiftEditor({
           >
             {offBusy ? "追加中…" : "追加"}
           </button>
+          {offError && (
+            <p className="col-span-2 text-sm text-red-700 sm:col-span-6">
+              {offError}
+            </p>
+          )}
         </form>
       </section>
     </div>

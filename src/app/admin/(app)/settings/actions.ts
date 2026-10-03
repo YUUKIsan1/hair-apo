@@ -207,12 +207,22 @@ export async function upsertMenu(input: {
     menuId = created.id;
   }
 
-  // staff_menus は選択状態で置き換え
-  const { error: delErr } = await db
-    .from("staff_menus")
-    .delete()
-    .eq("menu_id", menuId);
-  if (delErr) return { error: delErr.message };
+  // staff_menus は「有効スタッフの分だけ」選択状態で置き換え。
+  // 非表示スタッフの担当割当はフォームに出ないので残す
+  const { data: activeStaff } = await db
+    .from("staff")
+    .select("id")
+    .eq("salon_id", ctx.salon.id)
+    .eq("is_active", true);
+  const activeIds = (activeStaff ?? []).map((s) => s.id);
+  if (activeIds.length > 0) {
+    const { error: delErr } = await db
+      .from("staff_menus")
+      .delete()
+      .eq("menu_id", menuId)
+      .in("staff_id", activeIds);
+    if (delErr) return { error: delErr.message };
+  }
   const { error: insErr } = await db.from("staff_menus").insert(
     input.staff.map((s) => ({
       menu_id: menuId,
