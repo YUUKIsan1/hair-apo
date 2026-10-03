@@ -1,3 +1,5 @@
+export type SalonTemplate = "photo" | "card" | "simple";
+
 export interface Salon {
   id: string;
   slug: string;
@@ -8,6 +10,9 @@ export interface Salon {
   address: string | null;
   fee_rate_direct_bps: number;
   fee_rate_mall_bps: number;
+  template: SalonTemplate;
+  theme_color: string;
+  hero_image_url: string | null;
 }
 
 export interface Staff {

@@ -380,3 +380,68 @@ export async function deleteTimeOff(id: string): Promise<Result> {
   revalidatePath("/admin/settings/shifts");
   return {};
 }
+
+// ---- ページデザイン ----
+
+const TEMPLATES = ["photo", "card", "simple"] as const;
+
+export async function updateSalonDesign(input: {
+  template: string;
+  theme_color: string;
+}): Promise<Result> {
+  const ctx = await requireCtx();
+  if (!ctx) return { error: "unauthorized" };
+  if (!(TEMPLATES as readonly string[]).includes(input.template)) {
+    return { error: "テンプレートが不正です" };
+  }
+  if (!/^#[0-9a-fA-F]{6}$/.test(input.theme_color)) {
+    return { error: "カラーは #RRGGBB 形式で指定してください" };
+  }
+
+  const { error } = await createServiceClient()
+    .from("salons")
+    .update({ template: input.template, theme_color: input.theme_color })
+    .eq("id", ctx.salon.id);
+  if (error) return { error: error.message };
+  revalidatePath("/admin/settings/design");
+  revalidatePath(`/s/${ctx.salon.slug}`);
+  return {};
+}
+
+const IMAGE_TYPES: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+export async function uploadHeroImage(formData: FormData): Promise<Result> {
+  const ctx = await requireCtx();
+  if (!ctx) return { error: "unauthorized" };
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { error: "ファイルを選択してください" };
+  const ext = IMAGE_TYPES[file.type];
+  if (!ext) return { error: "JPEG / PNG / WebP のみアップロードできます" };
+  if (file.size > IMAGE_MAX_BYTES) {
+    return { error: "5MB以下の画像を選択してください" };
+  }
+
+  const db = createServiceClient();
+  const path = `${ctx.salon.id}/hero-${Date.now()}.${ext}`;
+  const { error: upErr } = await db.storage
+    .from("salon-assets")
+    .upload(path, file, { contentType: file.type });
+  if (upErr) return { error: upErr.message };
+
+  const {
+    data: { publicUrl },
+  } = db.storage.from("salon-assets").getPublicUrl(path);
+  const { error } = await db
+    .from("salons")
+    .update({ hero_image_url: publicUrl })
+    .eq("id", ctx.salon.id);
+  if (error) return { error: error.message };
+  revalidatePath("/admin/settings/design");
+  revalidatePath(`/s/${ctx.salon.slug}`);
+  return {};
+}

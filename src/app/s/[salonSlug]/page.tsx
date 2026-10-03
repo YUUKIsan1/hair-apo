@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { CSSProperties } from "react";
 import {
   getBusinessHours,
   getMenus,
@@ -33,28 +34,71 @@ export default async function SalonPage({
   const hoursByDow = new Map(hours.map((h) => [h.day_of_week, h]));
 
   const yen = (n: number) => `¥${n.toLocaleString("ja-JP")}`;
+  const heroSrc = salon.hero_image_url ?? "/images/salon-hero.jpg";
+  // 0005未適用のDBでは undefined になるので既定値にフォールバック
+  const template = salon.template ?? "photo";
+  const accent = salon.theme_color ?? "#1c1917";
 
   return (
-    <main className="pb-28">
-      {/* ヒーロー */}
-      <div className="relative h-[52vh] min-h-[340px] w-full">
-        <Image
-          src="/images/salon-hero.jpg"
-          alt={`${salon.name} 店内`}
-          fill
-          priority
-          className="object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 mx-auto max-w-3xl px-6 pb-8">
-          <h1 className="text-3xl font-bold tracking-wide text-white sm:text-4xl">
+    <main
+      className="pb-28"
+      style={{ "--salon-accent": accent } as CSSProperties}
+    >
+      {template === "photo" && (
+        <div className="relative h-[52vh] min-h-[340px] w-full">
+          <Image
+            src={heroSrc}
+            alt={`${salon.name} 店内`}
+            fill
+            priority
+            className="object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 mx-auto max-w-3xl px-6 pb-8">
+            <h1 className="text-3xl font-bold tracking-wide text-white sm:text-4xl">
+              {salon.name}
+            </h1>
+            {salon.address && (
+              <p className="mt-2 text-sm text-white/80">{salon.address}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {template === "card" && (
+        <div className="mx-auto max-w-3xl px-6 pt-8">
+          <div className="relative h-[38vh] min-h-[240px] w-full overflow-hidden rounded-xl">
+            <Image
+              src={heroSrc}
+              alt={`${salon.name} 店内`}
+              fill
+              priority
+              className="object-cover"
+            />
+          </div>
+          <h1 className="mt-6 text-3xl font-bold tracking-wide sm:text-4xl">
             {salon.name}
           </h1>
           {salon.address && (
-            <p className="mt-2 text-sm text-white/80">{salon.address}</p>
+            <p className="mt-2 text-sm text-[var(--color-mute)]">
+              {salon.address}
+            </p>
           )}
         </div>
-      </div>
+      )}
+
+      {template === "simple" && (
+        <div className="mx-auto max-w-3xl border-b hairline px-6 py-12">
+          <h1 className="text-3xl font-bold tracking-wide sm:text-4xl">
+            {salon.name}
+          </h1>
+          {salon.address && (
+            <p className="mt-3 text-sm text-[var(--color-mute)]">
+              {salon.address}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mx-auto max-w-3xl px-6">
         {/* 紹介文 */}
@@ -91,7 +135,7 @@ export default async function SalonPage({
                 </p>
                 <Link
                   href={`/s/${salon.slug}/book?menu=${m.id}`}
-                  className="shrink-0 rounded-md bg-[var(--color-ink)] px-4 py-1.5 text-[13px] font-medium text-white transition hover:opacity-85"
+                  className="shrink-0 rounded-md bg-[var(--salon-accent)] px-4 py-1.5 text-[13px] font-medium text-white transition hover:opacity-85"
                 >
                   予約
                 </Link>
@@ -189,7 +233,7 @@ export default async function SalonPage({
           </div>
           <Link
             href={`/s/${salon.slug}/book`}
-            className="rounded-lg bg-[var(--color-ink)] px-6 py-3 text-[14px] font-medium text-white transition hover:opacity-85"
+            className="rounded-lg bg-[var(--salon-accent)] px-6 py-3 text-[14px] font-medium text-white transition hover:opacity-85"
           >
             予約する
           </Link>
