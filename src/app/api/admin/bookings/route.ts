@@ -24,7 +24,20 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json()) as Body;
   const { menu_id, staff_id, starts_at, customer } = body;
-  if (!menu_id || !staff_id || !starts_at || !customer?.name || !customer?.phone) {
+  const str = (v: unknown, max: number) =>
+    typeof v === "string" && v.length > 0 && v.length <= max;
+  const optStr = (v: unknown, max: number) =>
+    v === undefined || v === null || (typeof v === "string" && v.length <= max);
+  if (
+    !str(menu_id, 64) ||
+    !str(staff_id, 64) ||
+    !str(starts_at, 40) ||
+    !customer ||
+    !str(customer.name, 100) ||
+    !str(customer.phone, 30) ||
+    !optStr(customer.name_kana, 100) ||
+    !optStr(customer.email, 254)
+  ) {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
 

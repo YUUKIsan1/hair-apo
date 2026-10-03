@@ -31,7 +31,8 @@ export async function PATCH(
   const { error } = await db
     .from("appointments")
     .update({ status, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("salon_id", ctx.salon.id);
   if (error) {
     // confirmedへ戻す際に枠が埋まっていた場合の排他制約違反
     if (error.code === "23P01") {
