@@ -15,7 +15,7 @@ export default async function ManageBookingPage({
   const { data: appt } = await db
     .from("appointments")
     .select(
-      "id, starts_at, ends_at, status, salons(name, slug), staff(name), menus(name, price, duration_minutes), customers(name)"
+      "id, starts_at, ends_at, status, customer_note, salons(name, slug), staff(name), menus(name, price, duration_minutes), customers(name)"
     )
     .eq("manage_token", token)
     .maybeSingle();
@@ -61,6 +61,9 @@ export default async function ManageBookingPage({
           ["日時", `${dateLabel} ${timeLabel} 〜`],
           ["所要時間", `約${menu.duration_minutes}分`],
           ["お名前", customer.name],
+          ...(appt.customer_note
+            ? [["ご要望", appt.customer_note] as [string, string]]
+            : []),
         ].map(([k, v]) => (
           <div key={k} className="grid grid-cols-[6rem_1fr] gap-4 py-3">
             <dt className="text-[var(--color-mute)]">{k}</dt>

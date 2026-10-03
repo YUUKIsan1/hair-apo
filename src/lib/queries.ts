@@ -86,12 +86,14 @@ export async function getTimeOff(
   to: string
 ): Promise<TimeOff[]> {
   const db = createServiceClient();
-  const { data } = await db
+  const { data, error } = await db
     .from("time_off")
     .select("*")
     .eq("salon_id", salonId)
     .lt("starts_at", to)
     .gt("ends_at", from);
+  // 休み情報が取れないまま枠を開けると閉店時間帯を予約できてしまうのでfail closed
+  if (error) throw new Error(`time_off fetch failed: ${error.message}`);
   return data ?? [];
 }
 
@@ -101,30 +103,33 @@ export async function getAppointments(
   to: string
 ): Promise<Appointment[]> {
   const db = createServiceClient();
-  const { data } = await db
+  const { data, error } = await db
     .from("appointments")
     .select("*")
     .eq("salon_id", salonId)
     .eq("status", "confirmed")
     .lt("starts_at", to)
     .gt("ends_at", from);
+  if (error) throw new Error(`appointments fetch failed: ${error.message}`);
   return data ?? [];
 }
 
+/** メニューを担当できるスタッフ(指名可/不可のフラグ付き)。フリー予約は全員が候補 */
 export async function getStaffForMenu(
   salonId: string,
   menuId: string
-): Promise<Staff[]> {
+): Promise<{ staff: Staff; nominable: boolean }[]> {
   const db = createServiceClient();
   const { data } = await db
     .from("staff_menus")
     .select("nominable, staff!inner(*)")
     .eq("menu_id", menuId)
     .eq("staff.is_active", true);
-  const staff = (data ?? [])
-    .filter((r) => r.nominable)
-    .map((r) => r.staff as unknown as Staff)
-    .filter((s) => s.salon_id === salonId)
-    .sort((a, b) => a.sort_order - b.sort_order);
-  return staff;
+  return (data ?? [])
+    .map((r) => ({
+      staff: r.staff as unknown as Staff,
+      nominable: r.nominable,
+    }))
+    .filter((p) => p.staff.salon_id === salonId)
+    .sort((a, b) => a.staff.sort_order - b.staff.sort_order);
 }

@@ -79,6 +79,7 @@ export interface Appointment {
   status: "confirmed" | "cancelled" | "completed" | "no_show";
   channel: "direct" | "mall" | "manual";
   payment_mode: "prepaid" | "card_on_file" | "on_site";
+  customer_note: string | null;
   manage_token: string;
   created_at: string;
 }

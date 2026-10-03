@@ -28,12 +28,16 @@ export async function GET(req: NextRequest) {
   const menu = menus.find((m) => m.id === menuId);
   if (!menu) return NextResponse.json({ error: "menu not found" }, { status: 404 });
 
-  let staffList = await getStaffForMenu(salon.id, menuId);
-  if (staffParam !== "free") {
-    staffList = staffList.filter((s) => s.id === staffParam);
-    if (staffList.length === 0)
-      return NextResponse.json({ error: "staff not found" }, { status: 404 });
-  }
+  const pairs = await getStaffForMenu(salon.id, menuId);
+  // フリーは担当可能な全員、指名は nominable のみ
+  const staffList =
+    staffParam === "free"
+      ? pairs.map((p) => p.staff)
+      : pairs
+          .filter((p) => p.staff.id === staffParam && p.nominable)
+          .map((p) => p.staff);
+  if (staffList.length === 0)
+    return NextResponse.json({ error: "staff not found" }, { status: 404 });
 
   const from = `${date}T00:00:00+09:00`;
   const to = `${date}T23:59:59+09:00`;

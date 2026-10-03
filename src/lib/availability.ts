@@ -48,9 +48,9 @@ function fmtIso(d: Date): string {
   )}T${fmtLabel(d)}:00+09:00`;
 }
 
-/** date("YYYY-MM-DD")のJST曜日 */
+/** date("YYYY-MM-DD")の曜日(ホストTZに依存しないようUTCで計算) */
 export function jstDayOfWeek(date: string): number {
-  return new Date(`${date}T12:00:00+09:00`).getDay();
+  return new Date(`${date}T00:00:00Z`).getUTCDay();
 }
 
 interface Args {
