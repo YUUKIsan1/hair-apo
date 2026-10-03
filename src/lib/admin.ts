@@ -16,9 +16,11 @@ export interface AdminContext {
 // (iOS等のブラウザ外クライアントはcookieを持たないため)。
 export async function getAdminContext(): Promise<AdminContext | null> {
   const auth = await createAuthClient();
-  const bearer = (await headers())
-    .get("authorization")
-    ?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const authHeader = (await headers()).get("authorization");
+  const bearer = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
+  // AuthorizationヘッダがあるのにBearerが取れない(空/形式不正)場合は
+  // cookieへフォールバックせず拒否する
+  if (authHeader && !bearer) return null;
   const {
     data: { user },
   } = await auth.auth.getUser(bearer);
