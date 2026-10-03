@@ -20,11 +20,11 @@ function fmtJst(iso: string): string {
   ).padStart(2, "0")}:${String(jst.getUTCMinutes()).padStart(2, "0")}`;
 }
 
-async function sendEmail(to: string, subject: string, html: string) {
+async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
     console.warn(`[notify] RESEND_API_KEY 未設定のため送信スキップ: ${subject} -> ${to}`);
-    return;
+    return false;
   }
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -36,7 +36,9 @@ async function sendEmail(to: string, subject: string, html: string) {
   });
   if (!res.ok) {
     console.error(`[notify] resend failed ${res.status}: ${await res.text()}`);
+    return false;
   }
+  return true;
 }
 
 interface MailData {
@@ -116,7 +118,7 @@ export async function notifyBooking(
     if (!d) return;
     const when = fmtJst(d.startsAt);
     const manageUrl = `${opts.baseUrl}/booking/${d.manageToken}`;
-    const tasks: Promise<void>[] = [];
+    const tasks: Promise<unknown>[] = [];
 
     if (opts.toCustomer !== false && d.customerEmail) {
       const subject =
@@ -169,4 +171,85 @@ export async function notifyBooking(
   } catch (e) {
     console.error("[notify] failed:", e);
   }
+}
+
+const JST = 9 * 3600_000;
+
+// JST基準で「明日」の0:00〜24:00に相当するUTCの範囲
+function tomorrowJstRange(): { from: string; to: string } {
+  const nowJst = new Date(Date.now() + JST);
+  const start = Date.UTC(
+    nowJst.getUTCFullYear(),
+    nowJst.getUTCMonth(),
+    nowJst.getUTCDate() + 1
+  );
+  return {
+    from: new Date(start - JST).toISOString(),
+    to: new Date(start - JST + 24 * 3600_000).toISOString(),
+  };
+}
+
+/**
+ * 明日の予約にリマインダーを送る。cronエンドポイントから日1回呼ぶ想定。
+ * reminder_sent_atを先に立ててから送るので重複送信しない。
+ */
+export async function sendBookingReminders(opts: {
+  baseUrl: string;
+}): Promise<{ found: number; sent: number }> {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn("[notify] RESEND_API_KEY 未設定のためリマインダーをスキップ");
+    return { found: 0, sent: 0 };
+  }
+  const db = createServiceClient();
+  const { from, to } = tomorrowJstRange();
+  const { data: appts, error } = await db
+    .from("appointments")
+    .select("id")
+    .eq("status", "confirmed")
+    .gte("starts_at", from)
+    .lt("starts_at", to)
+    .is("reminder_sent_at", null);
+  if (error) {
+    console.error(`[notify] reminder query failed: ${error.message}`);
+    return { found: 0, sent: 0 };
+  }
+
+  let sent = 0;
+  for (const { id } of appts ?? []) {
+    // 先に占有する(同時実行の重複送信防止)。送信不可でも再送は不要なので取り下げない
+    const { data: claimed } = await db
+      .from("appointments")
+      .update({ reminder_sent_at: new Date().toISOString() })
+      .eq("id", id)
+      .is("reminder_sent_at", null)
+      .select("id")
+      .maybeSingle();
+    if (!claimed) continue;
+
+    try {
+      const d = await fetchMailData(id);
+      if (!d?.customerEmail) continue;
+      const when = fmtJst(d.startsAt);
+      const manageUrl = `${opts.baseUrl}/booking/${d.manageToken}`;
+      const html = shell(`
+        <p>${esc(d.customerName)} 様<br><br>明日のご予約をお知らせします。</p>
+        <table style="margin:16px 0;border-collapse:collapse">
+          ${row("店舗", esc(d.salonName))}
+          ${row("日時", when)}
+          ${row("メニュー", esc(d.menuName))}
+          ${row("担当", esc(d.staffName))}
+          ${d.salonAddress ? row("住所", esc(d.salonAddress)) : ""}
+          ${d.salonPhone ? row("電話", esc(d.salonPhone)) : ""}
+        </table>
+        <p>変更・キャンセルはこちらから: <a href="${manageUrl}">${manageUrl}</a></p>
+        <p style="color:#78716c;font-size:12px">※ このメールは hair-apo から自動送信されています。</p>
+      `);
+      if (await sendEmail(d.customerEmail, `【${d.salonName}】明日のご予約のお知らせ`, html)) {
+        sent++;
+      }
+    } catch (e) {
+      console.error(`[notify] reminder failed for ${id}:`, e);
+    }
+  }
+  return { found: appts?.length ?? 0, sent };
 }
