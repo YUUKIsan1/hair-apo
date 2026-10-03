@@ -415,6 +415,28 @@ const IMAGE_TYPES: Record<string, string> = {
 };
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 
+// 宣言MIMEだけでなく先頭バイトも検査する
+function isRealImage(buf: Uint8Array, type: string): boolean {
+  if (type === "image/jpeg") return buf[0] === 0xff && buf[1] === 0xd8;
+  if (type === "image/png")
+    return (
+      buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47
+    );
+  if (type === "image/webp")
+    return (
+      buf.length > 11 &&
+      buf[0] === 0x52 && // R
+      buf[1] === 0x49 && // I
+      buf[2] === 0x46 && // F
+      buf[3] === 0x46 && // F
+      buf[8] === 0x57 && // W
+      buf[9] === 0x45 && // E
+      buf[10] === 0x42 && // B
+      buf[11] === 0x50 // P
+    );
+  return false;
+}
+
 export async function uploadHeroImage(formData: FormData): Promise<Result> {
   const ctx = await requireCtx();
   if (!ctx) return { error: "unauthorized" };
@@ -424,6 +446,10 @@ export async function uploadHeroImage(formData: FormData): Promise<Result> {
   if (!ext) return { error: "JPEG / PNG / WebP のみアップロードできます" };
   if (file.size > IMAGE_MAX_BYTES) {
     return { error: "5MB以下の画像を選択してください" };
+  }
+  const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  if (!isRealImage(head, file.type)) {
+    return { error: "画像ファイルが壊れているか形式が一致しません" };
   }
 
   const db = createServiceClient();
@@ -441,6 +467,17 @@ export async function uploadHeroImage(formData: FormData): Promise<Result> {
     .update({ hero_image_url: publicUrl })
     .eq("id", ctx.salon.id);
   if (error) return { error: error.message };
+
+  // 差し替えで古い画像が溜まらないよう掃除(失敗しても本体は成功させる)
+  const prefix = "/storage/v1/object/public/salon-assets/";
+  const oldUrl = ctx.salon.hero_image_url;
+  if (oldUrl?.includes(prefix)) {
+    const oldPath = oldUrl.slice(oldUrl.indexOf(prefix) + prefix.length);
+    if (oldPath.startsWith(`${ctx.salon.id}/`)) {
+      await db.storage.from("salon-assets").remove([oldPath]);
+    }
+  }
+
   revalidatePath("/admin/settings/design");
   revalidatePath(`/s/${ctx.salon.slug}`);
   return {};
