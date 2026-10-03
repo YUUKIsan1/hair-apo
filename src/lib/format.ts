@@ -31,3 +31,11 @@ export function dateLabelJst(date: string): string {
 export function yen(n: number): string {
   return `¥${n.toLocaleString("ja-JP")}`;
 }
+
+// JST日付文字列の加算(月末またぎ対応)
+export function addDaysJst(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00+09:00`);
+  return new Date(d.getTime() + days * 86400000).toLocaleDateString("sv-SE", {
+    timeZone: "Asia/Tokyo",
+  });
+}

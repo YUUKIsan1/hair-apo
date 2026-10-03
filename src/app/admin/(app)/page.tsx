@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAdminContext } from "@/lib/admin";
-import { dateLabelJst, timeJst, todayJst, yen } from "@/lib/format";
+import {
+  addDaysJst,
+  dateLabelJst,
+  timeJst,
+  todayJst,
+  yen,
+} from "@/lib/format";
 import { getStaffList } from "@/lib/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import StatusActions from "./StatusActions";
@@ -41,10 +47,8 @@ export default async function AdminLedgerPage({
       : todayJst();
   const from = new Date(`${date}T00:00:00+09:00`);
   const to = new Date(from.getTime() + 24 * 60 * 60 * 1000);
-  const prev = new Date(from.getTime() - 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
-  const next = to.toISOString().slice(0, 10);
+  const prev = addDaysJst(date, -1);
+  const next = addDaysJst(date, 1);
 
   const db = createServiceClient();
   const [staffList, { data: appointments }] = await Promise.all([
@@ -139,7 +143,7 @@ export default async function AdminLedgerPage({
         </span>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-xl border hairline bg-card">
+      <div className="mt-4 overflow-x-auto rounded-xl border hairline bg-card">
         {rows.length === 0 ? (
           <p className="px-6 py-12 text-center text-sm text-mute">
             この日の予約はありません
@@ -198,7 +202,11 @@ export default async function AdminLedgerPage({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <StatusActions id={a.id} status={a.status} />
+                    <StatusActions
+                      key={`${a.id}-${a.status}`}
+                      id={a.id}
+                      status={a.status}
+                    />
                   </td>
                 </tr>
               ))}

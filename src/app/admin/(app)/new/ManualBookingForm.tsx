@@ -51,12 +51,20 @@ export default function ManualBookingForm({
     setSlots(null);
     if (!menuId || !date) return;
     const staffParam = staffId || "free";
+    let cancelled = false;
     fetch(
       `/api/availability?salon=${salonSlug}&menu=${menuId}&staff=${staffParam}&date=${date}`
     )
       .then((r) => r.json())
-      .then((d) => setSlots(d.slots ?? []))
-      .catch(() => setSlots([]));
+      .then((d) => {
+        if (!cancelled) setSlots(d.slots ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setSlots([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [menuId, staffId, date, salonSlug]);
 
   useEffect(() => {
