@@ -107,7 +107,7 @@ export async function getAppointments(
     .from("appointments")
     .select("*")
     .eq("salon_id", salonId)
-    .eq("status", "confirmed")
+    .in("status", ["confirmed", "completed"])
     .lt("starts_at", to)
     .gt("ends_at", from);
   if (error) throw new Error(`appointments fetch failed: ${error.message}`);
