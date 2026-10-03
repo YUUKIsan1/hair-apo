@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminContext } from "@/lib/admin";
+import { notifyBooking } from "@/lib/notify";
 import { getMenus } from "@/lib/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 
@@ -127,6 +128,12 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // 手入力はサロン自身の操作なので客への確定メールのみ送る
+  await notifyBooking(appt.id, "confirmed", {
+    baseUrl: new URL(req.url).origin,
+    toSalon: false,
+  });
 
   return NextResponse.json({ appointment: appt });
 }

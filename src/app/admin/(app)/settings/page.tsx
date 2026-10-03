@@ -15,6 +15,7 @@ export default async function SettingsSalonPage() {
           phone: ctx.salon.phone ?? "",
           postal_code: ctx.salon.postal_code ?? "",
           address: ctx.salon.address ?? "",
+          notify_email: ctx.salon.notify_email ?? "",
         }}
         slug={ctx.salon.slug}
       />

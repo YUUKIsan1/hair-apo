@@ -17,6 +17,7 @@ export default function SalonForm({
     phone: string;
     postal_code: string;
     address: string;
+    notify_email: string;
   };
   slug: string;
 }) {
@@ -77,6 +78,16 @@ export default function SalonForm({
           <label className={label}>住所</label>
           <input value={form.address} onChange={set("address")} className={input} />
         </div>
+      </div>
+      <div>
+        <label className={label}>予約通知メール(新規予約・キャンセルを受け取る)</label>
+        <input
+          type="email"
+          value={form.notify_email}
+          onChange={set("notify_email")}
+          placeholder="salon@example.jp"
+          className={`${input} sm:max-w-md`}
+        />
       </div>
       <div className="flex items-center gap-3">
         <button

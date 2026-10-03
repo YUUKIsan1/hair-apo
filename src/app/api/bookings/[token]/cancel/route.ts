@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { notifyBooking } from "@/lib/notify";
 import { createServiceClient } from "@/lib/supabase/server";
 
 // POST /api/bookings/[token]/cancel — manage_token を持つ人だけがキャンセル可能
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
@@ -30,5 +31,8 @@ export async function POST(
     .update({ status: "cancelled", updated_at: new Date().toISOString() })
     .eq("id", appt.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await notifyBooking(appt.id, "cancelled", {
+    baseUrl: new URL(req.url).origin,
+  });
   return NextResponse.json({ ok: true });
 }

@@ -13,6 +13,7 @@ export interface Salon {
   template: SalonTemplate;
   theme_color: string;
   hero_image_url: string | null;
+  notify_email: string | null;
 }
 
 export interface Staff {
