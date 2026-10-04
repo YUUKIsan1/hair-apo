@@ -105,6 +105,9 @@ export async function generateMonthlyInvoices(): Promise<{
         .insert(items.map((i) => ({ ...i, invoice_id: inv.id })));
       if (itemErr) {
         console.error(`[billing] invoice_items insert failed:`, itemErr);
+        // 明細なしの請求書が残ると再実行でスキップされて永久に欠落するので取り消す
+        await db.from("invoices").delete().eq("id", inv.id);
+        continue;
       }
     }
     created++;
