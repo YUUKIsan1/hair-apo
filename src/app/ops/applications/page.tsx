@@ -89,6 +89,9 @@ export default async function OpsApplicationsPage({
                   {a.created_salon_id && (
                     <p className="mt-2 text-xs text-emerald-700">
                       サロン作成済み
+                      {a.accept_token
+                        ? "・オーナーの有効化待ち"
+                        : "・オーナー有効化済み"}
                     </p>
                   )}
                 </div>

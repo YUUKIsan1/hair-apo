@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getOpsUser } from "@/lib/ops";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -13,8 +14,22 @@ function fail(message: string): never {
   redirect(`/ops/applications?status=pending&error=${encodeURIComponent(message)}`);
 }
 
+// 有効化リンクのベースURL。Stripeのreturn_urlと同じ組み立て方
+async function origin(): Promise<string> {
+  const configured = process.env.APP_BASE_URL;
+  if (configured) return configured.replace(/\/+$/, "");
+  const h = await headers();
+  const host = h.get("host") ?? "localhost:3000";
+  const proto = host.includes("localhost") ? "http" : "https";
+  return `${proto}://${host}`;
+}
+
 // 承認をpending→approvedに先に進めて取り込む。同時実行や二重送信では
-// 先に取り込んだ側だけが進む。失敗時は作成物を消してpendingに戻す
+// 先に取り込んだ側だけが進む。失敗時は作成物を消してpendingに戻す。
+//
+// オーナー権限の紐付けはここでは行わない。承認されたサロンのみ作成し、
+// 申込者本人がメール内リンク(/accept)をログイン済みで開いた時点で
+// confirmApplicationが紐付ける(本人同意フロー)
 export async function approveApplication(
   applicationId: string,
   formData: FormData
@@ -79,66 +94,63 @@ export async function approveApplication(
     fail("サロンの作成に失敗しました。しばらくして再度お試しください");
   }
 
-  // 未登録メールなら招待メールを送ってユーザー作成。
-  // 既登録ならそのユーザーをオーナーとして紐付ける(既存パスワードでログイン可)
-  let userId: string | null = null;
-  let createdUserId: string | null = null;
-  const { data: invited, error: inviteErr } =
-    await db.auth.admin.inviteUserByEmail(app.email);
-  if (!inviteErr && invited?.user) {
-    userId = invited.user.id;
-    createdUserId = invited.user.id;
-  } else {
-    // 既登録ユーザーを探す(1000件ごとにページング)
-    let found: { id: string } | null = null;
-    for (let page = 1; ; page++) {
-      const { data: list } = await db.auth.admin.listUsers({
-        page,
-        perPage: 1000,
-      });
-      const users = list?.users ?? [];
-      const hit = users.find(
-        (u) => u.email?.toLowerCase() === app.email.toLowerCase()
-      );
-      if (hit) {
-        found = hit;
-        break;
-      }
-      if (users.length < 1000) break;
+  const acceptUrl = `${await origin()}/accept?token=${app.accept_token}`;
+
+  // 既登録ユーザーかを先に調べる(招待APIは既登録だとエラーになる)
+  let existingUserId: string | null = null;
+  for (let page = 1; ; page++) {
+    const { data: list } = await db.auth.admin.listUsers({
+      page,
+      perPage: 1000,
+    });
+    const users = list?.users ?? [];
+    const hit = users.find(
+      (u) => u.email?.toLowerCase() === app.email.toLowerCase()
+    );
+    if (hit) {
+      existingUserId = hit.id;
+      break;
     }
-    if (found) {
-      // 1ユーザーが複数サロンに所属すると/adminの判定(maybeSingle)が
-      // 壊れてログイン不可になる。別サロン所属のユーザーは承認できない
-      const { data: membership } = await db
-        .from("salon_users")
-        .select("user_id")
-        .eq("user_id", found.id)
-        .maybeSingle();
-      if (membership) {
-        await db.from("salons").delete().eq("id", salon!.id);
-        await revert(null);
-        fail("そのメールアドレスはすでに別のサロンのアカウントとして登録されています");
-      }
-      userId = found.id;
-    }
-  }
-  if (!userId) {
-    console.error(`[ops] approveApplication auth user failed:`, inviteErr);
-    await db.from("salons").delete().eq("id", salon!.id);
-    await revert(null);
-    fail("オーナーアカウントの招待に失敗しました。メールアドレスを確認してください");
+    if (users.length < 1000) break;
   }
 
-  const { error: linkErr } = await db.from("salon_users").insert({
-    salon_id: salon!.id,
-    user_id: userId,
-    role: "owner",
-  });
-  if (linkErr) {
-    console.error(`[ops] approveApplication salon_users failed:`, linkErr);
-    await db.from("salons").delete().eq("id", salon!.id);
-    await revert(createdUserId);
-    fail("アカウントの紐付けに失敗しました。しばらくして再度お試しください");
+  if (existingUserId) {
+    // 1ユーザーが複数サロンに所属すると/adminの判定(maybeSingle)が
+    // 壊れてログイン不可になる。別サロン所属のユーザーは承認できない
+    const { data: membership } = await db
+      .from("salon_users")
+      .select("user_id")
+      .eq("user_id", existingUserId)
+      .maybeSingle();
+    if (membership) {
+      await db.from("salons").delete().eq("id", salon!.id);
+      await revert(null);
+      fail("そのメールアドレスはすでに別のサロンのアカウントとして登録されています");
+    }
+    // 既存アカウントにはマジックリンクを送る。リンクを開くと
+    // ログイン済み状態で /accept に着地し、本人の操作で紐付く
+    const { error: otpErr } = await db.auth.signInWithOtp({
+      email: app.email,
+      options: { shouldCreateUser: false, emailRedirectTo: acceptUrl },
+    });
+    if (otpErr) {
+      console.error(`[ops] approveApplication otp failed:`, otpErr);
+      await db.from("salons").delete().eq("id", salon!.id);
+      await revert(null);
+      fail("有効化メールの送信に失敗しました。メールアドレスを確認してください");
+    }
+  } else {
+    // 未登録ならSupabaseの招待メール。パスワード設定後 /accept に着地する
+    const { data: invited, error: inviteErr } =
+      await db.auth.admin.inviteUserByEmail(app.email, {
+        redirectTo: acceptUrl,
+      });
+    if (inviteErr || !invited?.user) {
+      console.error(`[ops] approveApplication invite failed:`, inviteErr);
+      await db.from("salons").delete().eq("id", salon!.id);
+      await revert(invited?.user?.id ?? null);
+      fail("オーナーアカウントの招待に失敗しました。メールアドレスを確認してください");
+    }
   }
 
   const { error: updErr } = await db
