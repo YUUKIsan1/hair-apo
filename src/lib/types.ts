@@ -135,6 +135,7 @@ export interface Appointment {
   channel: "direct" | "mall" | "manual";
   payment_mode: "prepaid" | "card_on_file" | "on_site";
   customer_note: string | null;
+  price: number | null;
   manage_token: string;
   reminder_sent_at: string | null;
   created_at: string;
