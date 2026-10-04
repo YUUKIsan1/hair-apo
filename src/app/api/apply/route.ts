@@ -10,6 +10,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "リクエストが不正です" }, { status: 400 });
   }
 
+  // ボット対策のハニーポット。人間には見えない入力に値が入っていたら
+  // エラーにせず成功を装って捨てる
+  if (body.company) {
+    return NextResponse.json({ ok: true });
+  }
+
   const salonName = String(body.salon_name ?? "").trim();
   const contactName = String(body.contact_name ?? "").trim();
   const email = String(body.email ?? "").trim().toLowerCase();
@@ -44,6 +50,17 @@ export async function POST(req: Request) {
   }
 
   const db = createServiceClient();
+
+  // 同じメールアドレスの未対応申し込みがあれば追加しない(二重送信・連打対策)
+  const { data: dup } = await db
+    .from("salon_applications")
+    .select("id")
+    .eq("email", email)
+    .eq("status", "pending")
+    .limit(1);
+  if (dup && dup.length > 0) {
+    return NextResponse.json({ ok: true });
+  }
 
   if (slug) {
     const { data: taken } = await db

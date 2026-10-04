@@ -126,6 +126,14 @@ export default function ApplyForm() {
         />
         <p className="mt-1 text-xs text-mute">ログイン案内をお送りする宛先です</p>
       </div>
+      <input
+        type="text"
+        name="company"
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+        className="hidden"
+      />
       <div>
         <label className={label}>電話番号</label>
         <input
