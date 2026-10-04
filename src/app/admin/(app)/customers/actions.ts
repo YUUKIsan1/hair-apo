@@ -24,7 +24,7 @@ export async function updateCustomer(
   }
 ): Promise<Result> {
   const ctx = await getAdminContext();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   if (
     !str(customerId, 64) ||
     !str(input.name, 100) ||
@@ -77,7 +77,7 @@ function validateKarte(input: Omit<KarteInput, "customer_id">): string | null {
 
 export async function addKarte(input: KarteInput): Promise<Result> {
   const ctx = await getAdminContext();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   if (!str(input.customer_id, 64)) return { error: "入力内容が正しくありません" };
   const bad = validateKarte(input);
   if (bad) return { error: bad };
@@ -129,7 +129,7 @@ export async function updateKarte(
   input: Omit<KarteInput, "customer_id">
 ): Promise<Result> {
   const ctx = await getAdminContext();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   if (!str(karteId, 64)) return { error: "入力内容が正しくありません" };
   const bad = validateKarte(input);
   if (bad) return { error: bad };
@@ -180,7 +180,7 @@ export async function updateKarte(
 
 export async function deleteKarte(karteId: string): Promise<Result> {
   const ctx = await getAdminContext();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   if (!str(karteId, 64)) return { error: "入力内容が正しくありません" };
 
   const db = createServiceClient();

@@ -23,10 +23,21 @@ export async function updateSalon(input: {
   postal_code: string;
   address: string;
   notify_email: string;
+  cancel_deadline_hours: string;
+  cancel_fee_rate_percent: string;
 }): Promise<Result> {
   const ctx = await requireCtx();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   if (!input.name.trim()) return { error: "店舗名は必須です" };
+
+  const deadline = Number(input.cancel_deadline_hours);
+  if (!Number.isInteger(deadline) || deadline < 0 || deadline > 720) {
+    return { error: "キャンセル期限は0〜720時間で指定してください" };
+  }
+  const feePct = Number(input.cancel_fee_rate_percent);
+  if (!Number.isInteger(feePct) || feePct < 0 || feePct > 100) {
+    return { error: "キャンセル料率は0〜100%で指定してください" };
+  }
 
   const { error } = await createServiceClient()
     .from("salons")
@@ -37,6 +48,8 @@ export async function updateSalon(input: {
       postal_code: input.postal_code.trim() || null,
       address: input.address.trim() || null,
       notify_email: input.notify_email.trim() || null,
+      cancel_deadline_hours: deadline,
+      cancel_fee_rate_bps: feePct * 100,
     })
     .eq("id", ctx.salon.id);
   if (error) return { error: error.message };
@@ -51,7 +64,7 @@ export async function saveBusinessHours(
   rows: { day_of_week: number; start_time: string; end_time: string }[]
 ): Promise<Result> {
   const ctx = await requireCtx();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   for (const r of rows) {
     if (!TIME_RE.test(r.start_time) || !TIME_RE.test(r.end_time)) {
       return { error: "時刻の形式が正しくありません" };
@@ -98,7 +111,7 @@ export async function upsertStaff(input: {
   sort_order: number;
 }): Promise<Result> {
   const ctx = await requireCtx();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   if (!input.name.trim()) return { error: "名前は必須です" };
 
   const db = createServiceClient();
@@ -158,7 +171,7 @@ export async function setStaffActive(
   active: boolean
 ): Promise<Result> {
   const ctx = await requireCtx();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   const { error } = await createServiceClient()
     .from("staff")
     .update({ is_active: active, updated_at: new Date().toISOString() })
@@ -184,7 +197,7 @@ export async function upsertMenu(input: {
   staff: { staff_id: string; nominable: boolean }[];
 }): Promise<Result> {
   const ctx = await requireCtx();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   if (!input.name.trim()) return { error: "メニュー名は必須です" };
   if (input.price < 0 || input.duration_minutes <= 0 || input.buffer_minutes < 0) {
     return { error: "価格・所要時間が不正です" };
@@ -266,7 +279,7 @@ export async function setMenuActive(
   active: boolean
 ): Promise<Result> {
   const ctx = await requireCtx();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   const { error } = await createServiceClient()
     .from("menus")
     .update({ is_active: active })
@@ -286,7 +299,7 @@ export async function saveShifts(
   rows: { day_of_week: number; start_time: string; end_time: string }[]
 ): Promise<Result> {
   const ctx = await requireCtx();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   for (const r of rows) {
     if (!TIME_RE.test(r.start_time) || !TIME_RE.test(r.end_time)) {
       return { error: "時刻の形式が正しくありません" };
@@ -303,7 +316,7 @@ export async function saveShifts(
     .eq("id", staffId)
     .eq("salon_id", ctx.salon.id)
     .maybeSingle();
-  if (!staff) return { error: "staff not found" };
+  if (!staff) return { error: "スタッフが見つかりません" };
 
   const { data: oldShifts, error: oldErr } = await db
     .from("shifts")
@@ -340,7 +353,7 @@ export async function addTimeOff(input: {
   reason: string;
 }): Promise<Result> {
   const ctx = await requireCtx();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
     return { error: "日付が不正です" };
   }
@@ -359,7 +372,7 @@ export async function addTimeOff(input: {
       .eq("id", input.staff_id)
       .eq("salon_id", ctx.salon.id)
       .maybeSingle();
-    if (!st) return { error: "staff not found" };
+    if (!st) return { error: "スタッフが見つかりません" };
   }
   const { error } = await db.from("time_off").insert({
     salon_id: ctx.salon.id,
@@ -375,7 +388,7 @@ export async function addTimeOff(input: {
 
 export async function deleteTimeOff(id: string): Promise<Result> {
   const ctx = await requireCtx();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   const { error } = await createServiceClient()
     .from("time_off")
     .delete()
@@ -395,7 +408,7 @@ export async function updateSalonDesign(input: {
   theme_color: string;
 }): Promise<Result> {
   const ctx = await requireCtx();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   if (!(TEMPLATES as readonly string[]).includes(input.template)) {
     return { error: "テンプレートが不正です" };
   }
@@ -444,7 +457,7 @@ function isRealImage(buf: Uint8Array, type: string): boolean {
 
 export async function uploadHeroImage(formData: FormData): Promise<Result> {
   const ctx = await requireCtx();
-  if (!ctx) return { error: "unauthorized" };
+  if (!ctx) return { error: "認証されていません" };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "ファイルを選択してください" };
   const ext = IMAGE_TYPES[file.type];

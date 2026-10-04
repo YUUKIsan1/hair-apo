@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function CancelButton({ token }: { token: string }) {
+export function CancelButton({
+  token,
+  feeWarning,
+}: {
+  token: string;
+  feeWarning?: string;
+}) {
   const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +44,7 @@ export function CancelButton({ token }: { token: string }) {
     <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-center">
       <p className="text-[13px] text-red-700">
         本当にキャンセルしますか?この操作は取り消せません。
+        {feeWarning && <span className="mt-1 block font-medium">{feeWarning}</span>}
       </p>
       <div className="mt-4 flex gap-3">
         <button

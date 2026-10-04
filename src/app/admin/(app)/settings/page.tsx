@@ -16,6 +16,8 @@ export default async function SettingsSalonPage() {
           postal_code: ctx.salon.postal_code ?? "",
           address: ctx.salon.address ?? "",
           notify_email: ctx.salon.notify_email ?? "",
+          cancel_deadline_hours: String(ctx.salon.cancel_deadline_hours),
+          cancel_fee_rate_percent: String(ctx.salon.cancel_fee_rate_bps / 100),
         }}
         slug={ctx.salon.slug}
       />

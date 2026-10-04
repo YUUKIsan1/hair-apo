@@ -9,16 +9,16 @@ export async function POST(req: NextRequest) {
   const stripe = getStripe();
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!stripe || !secret) {
-    return NextResponse.json({ error: "not configured" }, { status: 503 });
+    return NextResponse.json({ error: "設定されていません" }, { status: 503 });
   }
   const sig = req.headers.get("stripe-signature");
-  if (!sig) return NextResponse.json({ error: "no signature" }, { status: 400 });
+  if (!sig) return NextResponse.json({ error: "署名がありません" }, { status: 400 });
 
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(await req.text(), sig, secret);
   } catch {
-    return NextResponse.json({ error: "invalid signature" }, { status: 400 });
+    return NextResponse.json({ error: "署名が不正です" }, { status: 400 });
   }
 
   const db = createServiceClient();
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       // 更新に失敗したまま200を返すとStripeの再送が止まるので500で受け付け直させる
       if (error) {
         console.error(`[webhook] completed update failed: ${error.message}`);
-        return NextResponse.json({ error: "update failed" }, { status: 500 });
+        return NextResponse.json({ error: "更新に失敗しました" }, { status: 500 });
       }
       // 支払い直前にキャンセルされた予約なら即返金して帳尻を合わせる
       if (pay) {
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
       if (error) {
         console.error(`[webhook] expired update failed: ${error.message}`);
-        return NextResponse.json({ error: "update failed" }, { status: 500 });
+        return NextResponse.json({ error: "更新に失敗しました" }, { status: 500 });
       }
       if (pay) {
         await db
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
           .eq("status", "succeeded");
         if (error) {
           console.error(`[webhook] refunded update failed: ${error.message}`);
-          return NextResponse.json({ error: "update failed" }, { status: 500 });
+          return NextResponse.json({ error: "更新に失敗しました" }, { status: 500 });
         }
       }
       break;

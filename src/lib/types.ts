@@ -16,6 +16,8 @@ export interface Salon {
   notify_email: string | null;
   stripe_account_id: string | null;
   stripe_onboarded: boolean;
+  cancel_deadline_hours: number;
+  cancel_fee_rate_bps: number;
 }
 
 export interface Staff {
@@ -97,6 +99,7 @@ export interface Payment {
   application_fee_amount: number;
   currency: string;
   status: "pending" | "succeeded" | "refunded" | "failed";
+  cancel_fee_amount: number;
   paid_at: string | null;
 }
 

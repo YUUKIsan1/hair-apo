@@ -32,15 +32,15 @@ export async function POST(req: NextRequest) {
   const body = (await req.json()) as BookingBody;
   const { salon: slug, menu_id, staff_id, starts_at, customer } = body;
   if (!slug || !menu_id || !starts_at || !customer?.name || !customer?.phone) {
-    return NextResponse.json({ error: "bad request" }, { status: 400 });
+    return NextResponse.json({ error: "リクエストが不正です" }, { status: 400 });
   }
 
   const salon = await getSalonBySlug(slug);
-  if (!salon) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!salon) return NextResponse.json({ error: "店舗が見つかりません" }, { status: 404 });
 
   const menus = await getMenus(salon.id);
   const menu = menus.find((m) => m.id === menu_id);
-  if (!menu) return NextResponse.json({ error: "menu not found" }, { status: 404 });
+  if (!menu) return NextResponse.json({ error: "メニューが見つかりません" }, { status: 404 });
 
   const pairs = await getStaffForMenu(salon.id, menu_id);
   // 指定スタッフは指名可能な者のみ。フリーは担当可能な全員が候補
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
         .map((p) => p.staff)
     : pairs.map((p) => p.staff);
   if (candidates.length === 0)
-    return NextResponse.json({ error: "staff not found" }, { status: 404 });
+    return NextResponse.json({ error: "スタッフが見つかりません" }, { status: 404 });
 
   const date = starts_at.slice(0, 10);
   const from = `${date}T00:00:00+09:00`;
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
           .eq("phone", customer.phone)
           .single();
         if (!again)
-          return NextResponse.json({ error: "customer fetch failed" }, { status: 500 });
+          return NextResponse.json({ error: "顧客情報の取得に失敗しました" }, { status: 500 });
         customerId = again.id;
       } else if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
