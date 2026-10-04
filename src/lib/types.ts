@@ -103,6 +103,26 @@ export interface Payment {
   paid_at: string | null;
 }
 
+export interface Invoice {
+  id: string;
+  salon_id: string;
+  period_year: number;
+  period_month: number;
+  amount: number;
+  subscription_fee: number;
+  status: "open" | "paid" | "void";
+  stripe_invoice_id: string | null;
+  issued_at: string | null;
+  paid_at: string | null;
+}
+
+export interface InvoiceItem {
+  id: string;
+  invoice_id: string;
+  appointment_id: string;
+  amount: number;
+}
+
 export interface Appointment {
   id: string;
   salon_id: string;

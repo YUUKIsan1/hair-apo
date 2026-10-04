@@ -7,6 +7,7 @@ const links = [
   { href: "/admin", label: "予約台帳" },
   { href: "/admin/new", label: "予約登録" },
   { href: "/admin/customers", label: "顧客" },
+  { href: "/admin/billing", label: "請求" },
   { href: "/admin/settings", label: "設定" },
 ];
 
