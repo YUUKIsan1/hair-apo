@@ -16,15 +16,16 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ...result, refunds });
 }
 
-// キャンセル済みなのに支払いが残ったままの予約を拾って返金を再試行する
-// (キャンセル時の即時返金がStripeエラー等で失敗した場合の保険)
+// キャンセル・ノーショーなのに支払いが残ったままの予約を拾って返金を再試行する
+// (即時返金がStripeエラー等で失敗した場合の保険。キャンセル料は
+// payments.cancel_fee_amountに保存済みの額が使われる)
 async function retryRefunds(): Promise<number> {
   const db = createServiceClient();
   const { data, error } = await db
     .from("payments")
     .select("appointment_id, appointments!inner(status)")
     .eq("status", "succeeded")
-    .eq("appointments.status", "cancelled");
+    .in("appointments.status", ["cancelled", "no_show"]);
   if (error) {
     console.error(`[cron] refund sweep failed: ${error.message}`);
     return 0;

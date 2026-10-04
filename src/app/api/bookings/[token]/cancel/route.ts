@@ -14,7 +14,7 @@ export async function POST(
   const { data: appt } = await db
     .from("appointments")
     .select(
-      "id, status, starts_at, payment_mode, salons(cancel_deadline_hours, cancel_fee_rate_bps)"
+      "id, status, starts_at, payment_mode, salons(cancel_deadline_hours, cancel_fee_rate_bps), payments(status)"
     )
     .eq("manage_token", token)
     .maybeSingle();
@@ -38,9 +38,15 @@ export async function POST(
     deadlineMs > 0 &&
     Date.now() > new Date(appt.starts_at).getTime() - deadlineMs;
   const feeBps = pastDeadline ? (salon?.cancel_fee_rate_bps ?? 0) : 0;
-  // 期限切れ後は「事前決済でキャンセル料を引ける」場合だけセルフキャンセル可。
-  // それ以外は店舗連絡を促してブロック
-  if (pastDeadline && !(appt.payment_mode === "prepaid" && feeBps > 0)) {
+  const hasPaid = (
+    appt.payments as unknown as { status: string }[] | null
+  )?.some((p) => p.status === "succeeded");
+  // 期限切れ後は「入金済みの事前決済でキャンセル料を引ける」場合だけ
+  // セルフキャンセル可。未入金では料を取れないので店舗連絡を促してブロック
+  if (
+    pastDeadline &&
+    !(appt.payment_mode === "prepaid" && feeBps > 0 && hasPaid)
+  ) {
     return NextResponse.json(
       {
         error: `キャンセル期限(予約の${salon?.cancel_deadline_hours}時間前)を過ぎています。店舗へ直接ご連絡ください`,

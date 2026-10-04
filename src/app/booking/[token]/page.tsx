@@ -66,8 +66,11 @@ export default async function ManageBookingPage({
   const feePct = salon.cancel_fee_rate_bps / 100;
   const pastDeadline =
     deadlineH > 0 && Date.now() > start.getTime() - deadlineH * 3600_000;
+  // キャンセル料を引けるのは入金済みのみ(API側も同じ条件)
   const chargeableCancel =
-    appt.payment_mode === "prepaid" && feePct > 0;
+    appt.payment_mode === "prepaid" &&
+    feePct > 0 &&
+    payment?.status === "succeeded";
   const policyText =
     deadlineH === 0
       ? "予約開始時刻までキャンセルできます。"

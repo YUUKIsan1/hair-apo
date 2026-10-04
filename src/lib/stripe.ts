@@ -158,6 +158,14 @@ export async function refundAppointment(
   if (!pay?.stripe_payment_intent_id || pay.status !== "succeeded") return;
   const fee =
     pay.cancel_fee_amount || Math.floor((pay.amount * feeRateBps) / 10000);
+  // Stripe呼出前に料金を固定保存する。返金失敗時のリトライが
+  // fee=0(全額返金)で走らないようにするため
+  if (!pay.cancel_fee_amount && fee > 0) {
+    await db
+      .from("payments")
+      .update({ cancel_fee_amount: fee })
+      .eq("id", pay.id);
+  }
   const refundAmount = pay.amount - fee;
   try {
     if (refundAmount > 0) {
