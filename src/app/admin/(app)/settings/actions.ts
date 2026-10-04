@@ -180,6 +180,7 @@ export async function upsertMenu(input: {
   duration_minutes: number;
   buffer_minutes: number;
   sort_order: number;
+  payment_mode: "on_site" | "prepaid";
   staff: { staff_id: string; nominable: boolean }[];
 }): Promise<Result> {
   const ctx = await requireCtx();
@@ -187,6 +188,9 @@ export async function upsertMenu(input: {
   if (!input.name.trim()) return { error: "メニュー名は必須です" };
   if (input.price < 0 || input.duration_minutes <= 0 || input.buffer_minutes < 0) {
     return { error: "価格・所要時間が不正です" };
+  }
+  if (input.payment_mode !== "on_site" && input.payment_mode !== "prepaid") {
+    return { error: "決済方法が不正です" };
   }
   if (input.staff.length === 0) {
     return { error: "担当スタッフを1人以上選んでください" };
@@ -201,6 +205,7 @@ export async function upsertMenu(input: {
     duration_minutes: input.duration_minutes,
     buffer_minutes: input.buffer_minutes,
     sort_order: input.sort_order,
+    payment_mode: input.payment_mode,
   };
   if (menuId) {
     const { error } = await db
@@ -215,8 +220,6 @@ export async function upsertMenu(input: {
       .insert({
         ...fields,
         salon_id: ctx.salon.id,
-        // 決済未実装のため any で作成。Stripe導入後に payment_mode を編集可能にする
-        payment_mode: "any",
       })
       .select("id")
       .single();

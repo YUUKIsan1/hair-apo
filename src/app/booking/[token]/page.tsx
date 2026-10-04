@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/server";
 import { CancelButton } from "./CancelButton";
+import { PayButton } from "./PayButton";
 
 const DOW = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -15,7 +16,7 @@ export default async function ManageBookingPage({
   const { data: appt } = await db
     .from("appointments")
     .select(
-      "id, starts_at, ends_at, status, customer_note, salons(name, slug), staff(name), menus(name, price, duration_minutes), customers(name)"
+      "id, starts_at, ends_at, status, customer_note, payment_mode, salons(name, slug), staff(name), menus(name, price, duration_minutes), customers(name), payments(status)"
     )
     .eq("manage_token", token)
     .maybeSingle();
@@ -29,6 +30,17 @@ export default async function ManageBookingPage({
     duration_minutes: number;
   };
   const customer = appt.customers as unknown as { name: string };
+  const payment = (appt.payments as unknown as { status: string }[] | null)?.[0];
+  const payLabel =
+    payment?.status === "succeeded"
+      ? "事前決済済み"
+      : payment?.status === "pending"
+        ? "支払い待ち"
+        : payment?.status === "refunded"
+          ? "返金済み"
+          : appt.payment_mode === "prepaid"
+            ? "支払い待ち"
+            : "現地払い";
 
   const start = new Date(appt.starts_at);
   const jst = new Date(start.getTime() + 9 * 3600_000);
@@ -59,6 +71,7 @@ export default async function ManageBookingPage({
           ["担当", staff.name],
           ["日時", `${dateLabel} ${timeLabel} 〜`],
           ["所要時間", `約${menu.duration_minutes}分`],
+          ["支払い", payLabel],
           ["お名前", customer.name],
           ...(appt.customer_note
             ? [["ご要望", appt.customer_note] as [string, string]]
@@ -70,6 +83,8 @@ export default async function ManageBookingPage({
           </div>
         ))}
       </dl>
+
+      {!cancelled && payment?.status === "pending" && <PayButton token={token} />}
 
       {!cancelled && (
         <div className="mt-10">

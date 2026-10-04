@@ -14,6 +14,8 @@ export interface Salon {
   theme_color: string;
   hero_image_url: string | null;
   notify_email: string | null;
+  stripe_account_id: string | null;
+  stripe_onboarded: boolean;
 }
 
 export interface Staff {
@@ -84,6 +86,18 @@ export interface Kart {
   visited_at: string;
   memo: string | null;
   photo_urls: string[];
+}
+
+export interface Payment {
+  id: string;
+  appointment_id: string;
+  stripe_payment_intent_id: string | null;
+  stripe_checkout_session_id: string | null;
+  amount: number;
+  application_fee_amount: number;
+  currency: string;
+  status: "pending" | "succeeded" | "refunded" | "failed";
+  paid_at: string | null;
 }
 
 export interface Appointment {

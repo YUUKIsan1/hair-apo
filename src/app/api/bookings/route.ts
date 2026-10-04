@@ -10,6 +10,7 @@ import {
   getTimeOff,
 } from "@/lib/queries";
 import { notifyBooking } from "@/lib/notify";
+import { createCheckoutSession, getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 
 interface BookingBody {
@@ -131,6 +132,13 @@ export async function POST(req: NextRequest) {
     start.getTime() + (menu.duration_minutes + menu.buffer_minutes) * 60_000
   );
 
+  // 事前決済はサロンがStripe連携済みのときだけ。未連携なら現地払いに落とす
+  const usePrepaid =
+    menu.payment_mode === "prepaid" &&
+    !!salon.stripe_account_id &&
+    salon.stripe_onboarded &&
+    !!getStripe();
+
   // フリーは先に埋まったスタッフで409にならないよう、他の候補で順に試す
   const tryOrder = [...slot.staffIds].sort(() => Math.random() - 0.5);
   let appt: {
@@ -153,8 +161,7 @@ export async function POST(req: NextRequest) {
         status: "confirmed",
         channel: "direct",
         customer_note: customer.notes?.trim() || null,
-        // 決済未実装のため any→on_site で確定。Stripe導入後に payment_mode を反映
-        payment_mode: "on_site",
+        payment_mode: usePrepaid ? "prepaid" : "on_site",
       })
       .select("id, manage_token, staff_id, starts_at, ends_at")
       .single();
@@ -173,12 +180,38 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  await notifyBooking(appt.id, "confirmed", {
-    baseUrl: new URL(req.url).origin,
-  });
+  const origin = new URL(req.url).origin;
+  await notifyBooking(appt.id, "confirmed", { baseUrl: origin });
+
+  let checkoutUrl: string | null = null;
+  if (usePrepaid) {
+    checkoutUrl = await createCheckoutSession({
+      appointmentId: appt.id,
+      manageToken: appt.manage_token,
+      salonName: salon.name,
+      menuName: menu.name,
+      price: menu.price,
+      feeBps: salon.fee_rate_direct_bps,
+      destination: salon.stripe_account_id!,
+      origin,
+    });
+    if (!checkoutUrl) {
+      // セッション発行失敗でも予約は確定させる。支払いは現地扱いに戻す
+      await db
+        .from("appointments")
+        .update({ payment_mode: "on_site", updated_at: new Date().toISOString() })
+        .eq("id", appt.id);
+      await db
+        .from("payments")
+        .update({ status: "failed", updated_at: new Date().toISOString() })
+        .eq("appointment_id", appt.id)
+        .eq("status", "pending");
+    }
+  }
 
   return NextResponse.json({
     appointment: appt,
     manage_url: `/booking/${appt.manage_token}`,
+    checkout_url: checkoutUrl,
   });
 }

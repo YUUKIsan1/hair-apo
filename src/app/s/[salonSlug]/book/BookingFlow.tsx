@@ -103,7 +103,15 @@ export function BookingFlow({ salon, menus, staffByMenu, initialMenuId }: Props)
       }),
     });
     if (res.ok) {
-      const data = (await res.json()) as { manage_url: string };
+      const data = (await res.json()) as {
+        manage_url: string;
+        checkout_url?: string | null;
+      };
+      if (data.checkout_url) {
+        // 事前決済: Stripeの支払いページへ(戻るとdone相当の確認ページ)
+        window.location.href = data.checkout_url;
+        return;
+      }
       setManageUrl(data.manage_url);
       setStep("done");
     } else {
