@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/ops", label: "サロン一覧" },
+  { href: "/ops/applications", label: "申し込み" },
   { href: "/ops/billing", label: "請求管理" },
 ];
 
