@@ -160,6 +160,7 @@ export async function POST(req: NextRequest) {
         ends_at: end.toISOString(),
         status: "confirmed",
         channel: "direct",
+        price: menu.price,
         customer_note: customer.notes?.trim() || null,
         payment_mode: usePrepaid ? "prepaid" : "on_site",
       })

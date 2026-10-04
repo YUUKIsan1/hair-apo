@@ -29,7 +29,7 @@ export async function bookingFeeItems(
   const { from, to } = monthRangeUtc(year, month);
   const { data: appts } = await db
     .from("appointments")
-    .select("id, channel, menus(price)")
+    .select("id, channel, price, menus(price)")
     .eq("salon_id", salonId)
     .eq("status", "completed")
     .eq("payment_mode", "on_site")
@@ -38,11 +38,10 @@ export async function bookingFeeItems(
     .lt("starts_at", to);
   return (appts ?? []).map((a) => {
     const menu = a.menus as unknown as { price: number } | null;
+    // priceは予約時点のスナップショット。古い予約はメニュー価格にフォールバック
+    const unit = (a.price as number | null) ?? menu?.price ?? 0;
     const bps = a.channel === "mall" ? feeMallBps : feeDirectBps;
-    return {
-      appointment_id: a.id,
-      amount: Math.floor(((menu?.price ?? 0) * bps) / 10000),
-    };
+    return { appointment_id: a.id, amount: Math.floor((unit * bps) / 10000) };
   });
 }
 

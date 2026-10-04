@@ -33,6 +33,21 @@ const STATUS_STYLE: Record<string, string> = {
   no_show: "bg-red-50 text-red-700",
 };
 
+// PostgRESTは1000件で打ち切られるためページングで全件取る
+async function fetchAll<T>(build: () => {
+  range: (f: number, t: number) => PromiseLike<{ data: T[] | null }>;
+}): Promise<T[]> {
+  const out: T[] = [];
+  const PAGE = 1000;
+  for (let i = 0; ; i += PAGE) {
+    const { data } = await build().range(i, i + PAGE - 1);
+    if (!data || data.length === 0) break;
+    out.push(...data);
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
 export default async function AdminLedgerPage({
   searchParams,
 }: {
@@ -58,7 +73,7 @@ export default async function AdminLedgerPage({
   const prevM = monthRangeUtc(py, pm);
   const nowIso = new Date().toISOString();
 
-  const [staffList, { data: appointments }, { data: monthAppts }, futureCount] =
+  const [staffList, { data: appointments }, monthAppts, futureCount] =
     await Promise.all([
       getStaffList(ctx.salon.id),
       db
@@ -70,12 +85,15 @@ export default async function AdminLedgerPage({
         .gte("starts_at", from.toISOString())
         .lt("starts_at", to.toISOString())
         .order("starts_at"),
-      db
-        .from("appointments")
-        .select("status, starts_at, menus(price)")
-        .eq("salon_id", ctx.salon.id)
-        .gte("starts_at", prevM.from)
-        .lt("starts_at", cur.to),
+      fetchAll(() =>
+        db
+          .from("appointments")
+          .select("status, starts_at, price, menus(price)")
+          .eq("salon_id", ctx.salon.id)
+          .gte("starts_at", prevM.from)
+          .lt("starts_at", cur.to)
+          .order("starts_at")
+      ),
       db
         .from("appointments")
         .select("id", { count: "exact", head: true })
@@ -88,19 +106,26 @@ export default async function AdminLedgerPage({
   interface MonthRow {
     status: string;
     starts_at: string;
+    price: number | null;
     menus: { price: number } | null;
   }
-  const mrows = (monthAppts ?? []) as unknown as MonthRow[];
-  const inCur = mrows.filter(
-    (a) => a.starts_at >= cur.from && a.starts_at < cur.to
-  );
-  const inPrev = mrows.filter(
-    (a) => a.starts_at >= prevM.from && a.starts_at < prevM.to
-  );
+  const mrows = monthAppts as unknown as MonthRow[];
+  // タイムゾーン表記(+00:00等)で文字列比較するとずれるのでepochで比較
+  const curFrom = +new Date(cur.from);
+  const curTo = +new Date(cur.to);
+  const prevFrom = +new Date(prevM.from);
+  const inCur = mrows.filter((a) => {
+    const t = +new Date(a.starts_at);
+    return t >= curFrom && t < curTo;
+  });
+  const inPrev = mrows.filter((a) => {
+    const t = +new Date(a.starts_at);
+    return t >= prevFrom && t < curFrom;
+  });
   const salesOf = (rows: MonthRow[]) =>
     rows
       .filter((a) => a.status === "completed")
-      .reduce((t, a) => t + (a.menus?.price ?? 0), 0);
+      .reduce((t, a) => t + (a.price ?? a.menus?.price ?? 0), 0);
   const monthSales = salesOf(inCur);
   const prevSales = salesOf(inPrev);
   const monthDone = inCur.filter((a) => a.status === "completed").length;
@@ -116,7 +141,7 @@ export default async function AdminLedgerPage({
     (a) => a.status === "confirmed" || a.status === "completed"
   );
   const expected = live.reduce(
-    (sum, a) => sum + (a.menus?.price ?? 0),
+    (sum, a) => sum + (a.price ?? a.menus?.price ?? 0),
     0
   );
 

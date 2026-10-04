@@ -114,6 +114,7 @@ export async function POST(req: NextRequest) {
       ends_at: end.toISOString(),
       status: "confirmed",
       channel: "manual",
+      price: menu.price,
       payment_mode: "on_site",
     })
     .select("id, manage_token, starts_at, ends_at")
