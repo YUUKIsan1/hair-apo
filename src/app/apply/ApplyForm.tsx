@@ -8,6 +8,7 @@ const label = "mb-1 block text-xs text-mute";
 
 export default function ApplyForm() {
   const [salonName, setSalonName] = useState("");
+  const [autoSlug, setAutoSlug] = useState(true);
   const [slug, setSlug] = useState("");
   const [contactName, setContactName] = useState("");
   const [email, setEmail] = useState("");
@@ -71,21 +72,37 @@ export default function ApplyForm() {
         />
       </div>
       <div>
-        <label className={label}>希望する店舗URL(任意)</label>
-        <div className="flex items-center gap-1">
-          <span className="text-sm text-mute">/s/</span>
+        <label className="flex items-center gap-2 text-sm">
           <input
-            className={input}
-            value={slug}
-            onChange={(e) => setSlug(e.target.value.toLowerCase())}
-            placeholder="mystore"
-            pattern="[a-z0-9][a-z0-9-]{1,62}"
-            maxLength={63}
+            type="checkbox"
+            checked={autoSlug}
+            onChange={(e) => {
+              setAutoSlug(e.target.checked);
+              if (e.target.checked) setSlug("");
+            }}
+            className="size-4 accent-[var(--color-ink)]"
           />
-        </div>
-        <p className="mt-1 text-xs text-mute">
-          半角英数字とハイフン(2〜63文字)。空欄なら自動発行されます
-        </p>
+          店舗URLは自動で発行する
+        </label>
+        {!autoSlug && (
+          <div className="mt-2">
+            <div className="flex items-center gap-1">
+              <span className="text-sm text-mute">/s/</span>
+              <input
+                className={input}
+                value={slug}
+                onChange={(e) => setSlug(e.target.value.toLowerCase())}
+                placeholder="mystore"
+                pattern="[a-z0-9][a-z0-9-]{1,62}"
+                maxLength={63}
+                required={!autoSlug}
+              />
+            </div>
+            <p className="mt-1 text-xs text-mute">
+              半角英数字とハイフン(2〜63文字)
+            </p>
+          </div>
+        )}
       </div>
       <div>
         <label className={label}>担当者名 *</label>
