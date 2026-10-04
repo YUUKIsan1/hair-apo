@@ -1,10 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getOpsUser } from "@/lib/ops";
 import { createServiceClient } from "@/lib/supabase/server";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,62}$/;
+
+// 承認失敗を画面に出す。server actionはPromise<void>なので、
+// 失敗理由はクエリパラメータで一覧画面に返す
+function fail(message: string): never {
+  redirect(`/ops/applications?status=pending&error=${encodeURIComponent(message)}`);
+}
 
 // 申し込みの承認: サロン作成→オーナーのauthユーザー招待/紐付け→申し込みを完了にする
 export async function approveApplication(
@@ -45,7 +52,7 @@ export async function approveApplication(
     .single();
   if (salonErr || !salon) {
     console.error(`[ops] approveApplication salon insert failed:`, salonErr);
-    return;
+    fail("サロンの作成に失敗しました。しばらくして再度お試しください");
   }
 
   // 未登録メールなら招待メールを送ってユーザー作成。
@@ -60,23 +67,36 @@ export async function approveApplication(
     const found = list?.users?.find(
       (u) => u.email?.toLowerCase() === app.email.toLowerCase()
     );
-    if (found) userId = found.id;
+    if (found) {
+      // 1ユーザーが複数サロンに所属すると/adminの判定(maybeSingle)が
+      // 壊れてログイン不可になる。別サロン所属のユーザーは承認できない
+      const { data: membership } = await db
+        .from("salon_users")
+        .select("user_id")
+        .eq("user_id", found.id)
+        .maybeSingle();
+      if (membership) {
+        await db.from("salons").delete().eq("id", salon!.id);
+        fail("そのメールアドレスはすでに別のサロンのアカウントとして登録されています");
+      }
+      userId = found.id;
+    }
   }
   if (!userId) {
     console.error(`[ops] approveApplication auth user failed:`, inviteErr);
-    await db.from("salons").delete().eq("id", salon.id);
-    return;
+    await db.from("salons").delete().eq("id", salon!.id);
+    fail("オーナーアカウントの招待に失敗しました。メールアドレスを確認してください");
   }
 
   const { error: linkErr } = await db.from("salon_users").insert({
-    salon_id: salon.id,
+    salon_id: salon!.id,
     user_id: userId,
     role: "owner",
   });
   if (linkErr) {
     console.error(`[ops] approveApplication salon_users failed:`, linkErr);
-    await db.from("salons").delete().eq("id", salon.id);
-    return;
+    await db.from("salons").delete().eq("id", salon!.id);
+    fail("アカウントの紐付けに失敗しました。しばらくして再度お試しください");
   }
 
   const { error: updErr } = await db

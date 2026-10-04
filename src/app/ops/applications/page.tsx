@@ -14,11 +14,14 @@ const STATUS_LABEL: Record<string, string> = {
 export default async function OpsApplicationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; error?: string }>;
 }) {
   const params = await searchParams;
   const user = await getOpsUser();
   if (!user) redirect("/admin/login");
+
+  const errMsg =
+    typeof params.error === "string" && params.error ? params.error : null;
 
   const filter =
     params.status && ["pending", "approved", "rejected"].includes(params.status)
@@ -36,6 +39,11 @@ export default async function OpsApplicationsPage({
   return (
     <div>
       <h1 className="text-xl font-bold">導入申し込み</h1>
+      {errMsg && (
+        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          {errMsg}
+        </p>
+      )}
       <div className="mt-3 flex gap-2 text-xs">
         {(["pending", "approved", "rejected"] as const).map((s) => (
           <Link
