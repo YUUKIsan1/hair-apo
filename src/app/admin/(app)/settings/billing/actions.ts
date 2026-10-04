@@ -5,10 +5,14 @@ import { getAdminContext } from "@/lib/admin";
 import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 
+// Stripeオンボーディングのreturn_urlは信頼できるオリジンで組み立てる。
+// x-forwarded-*はプロキシ設定次第でクライアント値が通るので使わない
 async function origin(): Promise<string> {
+  const configured = process.env.APP_BASE_URL;
+  if (configured) return configured.replace(/\/+$/, "");
   const h = await headers();
-  const proto = h.get("x-forwarded-proto") ?? "http";
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const host = h.get("host") ?? "localhost:3000";
+  const proto = host.includes("localhost") ? "http" : "https";
   return `${proto}://${host}`;
 }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminContext } from "@/lib/admin";
 import { notifyBooking } from "@/lib/notify";
-import { refundAppointment } from "@/lib/stripe";
+import { expirePendingCheckout, refundAppointment } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 
 const STATUSES = ["confirmed", "cancelled", "completed", "no_show"] as const;
@@ -47,6 +47,7 @@ export async function PATCH(
   }
   // サロン側のキャンセルは客にだけ通知する。事前決済済みなら返金も行う
   if (status === "cancelled") {
+    await expirePendingCheckout(id);
     await refundAppointment(id);
     await notifyBooking(id, "cancelled", {
       baseUrl: new URL(req.url).origin,

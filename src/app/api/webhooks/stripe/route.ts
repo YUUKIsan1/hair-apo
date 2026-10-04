@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, refundAppointment } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 
 // POST /api/webhooks/stripe — Stripeプラットフォームアカウントのイベント受信。
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
         typeof session.payment_intent === "string"
           ? session.payment_intent
           : (session.payment_intent?.id ?? null);
-      const { error } = await db
+      const { data: pay, error } = await db
         .from("payments")
         .update({
           status: "succeeded",
@@ -40,21 +40,42 @@ export async function POST(req: NextRequest) {
           updated_at: now,
         })
         .eq("stripe_checkout_session_id", session.id)
-        .eq("status", "pending");
-      if (error) console.error(`[webhook] completed update failed: ${error.message}`);
+        .eq("status", "pending")
+        .select("appointment_id")
+        .maybeSingle();
+      // 更新に失敗したまま200を返すとStripeの再送が止まるので500で受け付け直させる
+      if (error) {
+        console.error(`[webhook] completed update failed: ${error.message}`);
+        return NextResponse.json({ error: "update failed" }, { status: 500 });
+      }
+      // 支払い直前にキャンセルされた予約なら即返金して帳尻を合わせる
+      if (pay) {
+        const { data: appt } = await db
+          .from("appointments")
+          .select("status")
+          .eq("id", pay.appointment_id)
+          .maybeSingle();
+        if (appt?.status === "cancelled") {
+          await refundAppointment(pay.appointment_id);
+        }
+      }
       break;
     }
     case "checkout.session.expired": {
       // 最新のsessionのみ対象(payments行のsession_idと一致する場合)。
       // 古いretry sessionのexpiredでは予約をキャンセルしない
       const session = event.data.object as Stripe.Checkout.Session;
-      const { data: pay } = await db
+      const { data: pay, error } = await db
         .from("payments")
         .update({ status: "failed", updated_at: now })
         .eq("stripe_checkout_session_id", session.id)
         .eq("status", "pending")
         .select("appointment_id")
         .maybeSingle();
+      if (error) {
+        console.error(`[webhook] expired update failed: ${error.message}`);
+        return NextResponse.json({ error: "update failed" }, { status: 500 });
+      }
       if (pay) {
         await db
           .from("appointments")
@@ -71,11 +92,15 @@ export async function POST(req: NextRequest) {
           ? charge.payment_intent
           : (charge.payment_intent?.id ?? null);
       if (pi) {
-        await db
+        const { error } = await db
           .from("payments")
           .update({ status: "refunded", updated_at: now })
           .eq("stripe_payment_intent_id", pi)
           .eq("status", "succeeded");
+        if (error) {
+          console.error(`[webhook] refunded update failed: ${error.message}`);
+          return NextResponse.json({ error: "update failed" }, { status: 500 });
+        }
       }
       break;
     }

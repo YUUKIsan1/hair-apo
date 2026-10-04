@@ -34,7 +34,7 @@ export async function createCheckoutSession(
     // succeeded/refundedは再支払い不要・再返金不可なので新規sessionを作らない
     const { data: pay } = await db
       .from("payments")
-      .select("id, status")
+      .select("id, status, stripe_checkout_session_id")
       .eq("appointment_id", a.appointmentId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -81,6 +81,18 @@ export async function createCheckoutSession(
       cancel_url: `${a.origin}/booking/${a.manageToken}`,
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60, // Stripe最小値は30分
     });
+    // 新しいsessionを指す前に旧sessionを失効させる。
+    // 残したままだと古いsession経由の支払いがwebhookで照合できず宙に浮く
+    if (
+      pay?.stripe_checkout_session_id &&
+      pay.stripe_checkout_session_id !== session.id
+    ) {
+      try {
+        await stripe.checkout.sessions.expire(pay.stripe_checkout_session_id);
+      } catch (e) {
+        console.error("[stripe] old session expire failed:", e);
+      }
+    }
     const pi =
       typeof session.payment_intent === "string"
         ? session.payment_intent
@@ -101,6 +113,28 @@ export async function createCheckoutSession(
   } catch (e) {
     console.error("[stripe] checkout session failed:", e);
     return null;
+  }
+}
+
+// キャンセル時に未決済のCheckout Sessionを失効させ、後から支払えないようにする
+export async function expirePendingCheckout(
+  appointmentId: string
+): Promise<void> {
+  const stripe = getStripe();
+  if (!stripe) return;
+  const db = createServiceClient();
+  const { data: pay } = await db
+    .from("payments")
+    .select("id, status, stripe_checkout_session_id")
+    .eq("appointment_id", appointmentId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (pay?.status !== "pending" || !pay.stripe_checkout_session_id) return;
+  try {
+    await stripe.checkout.sessions.expire(pay.stripe_checkout_session_id);
+  } catch (e) {
+    console.error(`[stripe] expire failed for ${appointmentId}:`, e);
   }
 }
 
