@@ -23,10 +23,21 @@ export async function updateSalon(input: {
   postal_code: string;
   address: string;
   notify_email: string;
+  cancel_deadline_hours: string;
+  cancel_fee_rate_percent: string;
 }): Promise<Result> {
   const ctx = await requireCtx();
   if (!ctx) return { error: "unauthorized" };
   if (!input.name.trim()) return { error: "店舗名は必須です" };
+
+  const deadline = Number(input.cancel_deadline_hours);
+  if (!Number.isInteger(deadline) || deadline < 0 || deadline > 720) {
+    return { error: "キャンセル期限は0〜720時間で指定してください" };
+  }
+  const feePct = Number(input.cancel_fee_rate_percent);
+  if (!Number.isInteger(feePct) || feePct < 0 || feePct > 100) {
+    return { error: "キャンセル料率は0〜100%で指定してください" };
+  }
 
   const { error } = await createServiceClient()
     .from("salons")
@@ -37,6 +48,8 @@ export async function updateSalon(input: {
       postal_code: input.postal_code.trim() || null,
       address: input.address.trim() || null,
       notify_email: input.notify_email.trim() || null,
+      cancel_deadline_hours: deadline,
+      cancel_fee_rate_bps: feePct * 100,
     })
     .eq("id", ctx.salon.id);
   if (error) return { error: error.message };

@@ -18,6 +18,8 @@ export default function SalonForm({
     postal_code: string;
     address: string;
     notify_email: string;
+    cancel_deadline_hours: string;
+    cancel_fee_rate_percent: string;
   };
   slug: string;
 }) {
@@ -88,6 +90,32 @@ export default function SalonForm({
           placeholder="salon@example.jp"
           className={`${input} sm:max-w-md`}
         />
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label className={label}>キャンセル期限(予約の何時間前まで / 0=開始時刻まで可)</label>
+          <input
+            type="number"
+            min={0}
+            max={720}
+            step={1}
+            value={form.cancel_deadline_hours}
+            onChange={set("cancel_deadline_hours")}
+            className={input}
+          />
+        </div>
+        <div>
+          <label className={label}>キャンセル料率%(期限後・ノーショー時に事前決済から差引)</label>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={1}
+            value={form.cancel_fee_rate_percent}
+            onChange={set("cancel_fee_rate_percent")}
+            className={input}
+          />
+        </div>
       </div>
       <div className="flex items-center gap-3">
         <button

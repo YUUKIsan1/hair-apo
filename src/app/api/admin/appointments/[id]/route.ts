@@ -45,7 +45,8 @@ export async function PATCH(
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  // サロン側のキャンセルは客にだけ通知する。事前決済済みなら返金も行う
+  // サロン側のキャンセルは客にだけ通知する。事前決済済みなら返金も行う。
+  // 店都合キャンセルは全額返金、ノーショーはサロン設定のキャンセル料率を差し引く
   if (status === "cancelled") {
     await expirePendingCheckout(id);
     await refundAppointment(id);
@@ -53,6 +54,9 @@ export async function PATCH(
       baseUrl: new URL(req.url).origin,
       toSalon: false,
     });
+  }
+  if (status === "no_show") {
+    await refundAppointment(id, ctx.salon.cancel_fee_rate_bps);
   }
   return NextResponse.json({ ok: true });
 }

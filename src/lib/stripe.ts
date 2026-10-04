@@ -138,29 +138,41 @@ export async function expirePendingCheckout(
   }
 }
 
-// キャンセル時の返金。未払い/キー未設定/対象外なら何もしない
-export async function refundAppointment(appointmentId: string): Promise<void> {
+// キャンセル/ノーショー時の返金。feeRateBps分をキャンセル料として残し、
+// 残額だけ返金する。未払い/キー未設定/対象外なら何もしない。
+// cancel_fee_amountは初回に保存するので、リトライ時に料率が変わっても同じ額を引く
+export async function refundAppointment(
+  appointmentId: string,
+  feeRateBps = 0
+): Promise<void> {
   const stripe = getStripe();
   if (!stripe) return;
   const db = createServiceClient();
   const { data: pay } = await db
     .from("payments")
-    .select("id, stripe_payment_intent_id, status")
+    .select("id, stripe_payment_intent_id, status, amount, cancel_fee_amount")
     .eq("appointment_id", appointmentId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (!pay?.stripe_payment_intent_id || pay.status !== "succeeded") return;
+  const fee =
+    pay.cancel_fee_amount || Math.floor((pay.amount * feeRateBps) / 10000);
+  const refundAmount = pay.amount - fee;
   try {
-    await stripe.refunds.create({
-      payment_intent: pay.stripe_payment_intent_id,
-      reverse_transfer: true,
-      refund_application_fee: true,
-    });
+    if (refundAmount > 0) {
+      await stripe.refunds.create({
+        payment_intent: pay.stripe_payment_intent_id,
+        amount: refundAmount,
+        reverse_transfer: true,
+        refund_application_fee: true,
+      });
+    }
     await db
       .from("payments")
       .update({
         status: "refunded",
+        cancel_fee_amount: fee,
         updated_at: new Date().toISOString(),
       })
       .eq("id", pay.id);
