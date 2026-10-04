@@ -18,15 +18,15 @@ export async function GET(req: NextRequest) {
   const staffParam = q.get("staff") ?? "free";
   const date = q.get("date");
   if (!slug || !menuId || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return NextResponse.json({ error: "bad request" }, { status: 400 });
+    return NextResponse.json({ error: "リクエストが不正です" }, { status: 400 });
   }
 
   const salon = await getSalonBySlug(slug);
-  if (!salon) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!salon) return NextResponse.json({ error: "店舗が見つかりません" }, { status: 404 });
 
   const menus = await getMenus(salon.id);
   const menu = menus.find((m) => m.id === menuId);
-  if (!menu) return NextResponse.json({ error: "menu not found" }, { status: 404 });
+  if (!menu) return NextResponse.json({ error: "メニューが見つかりません" }, { status: 404 });
 
   const pairs = await getStaffForMenu(salon.id, menuId);
   // フリーは担当可能な全員、指名は nominable のみ
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
           .filter((p) => p.staff.id === staffParam && p.nominable)
           .map((p) => p.staff);
   if (staffList.length === 0)
-    return NextResponse.json({ error: "staff not found" }, { status: 404 });
+    return NextResponse.json({ error: "スタッフが見つかりません" }, { status: 404 });
 
   const from = `${date}T00:00:00+09:00`;
   const to = `${date}T23:59:59+09:00`;

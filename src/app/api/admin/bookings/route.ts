@@ -21,7 +21,7 @@ interface Body {
 // (シフト外・営業時間外の予約も台帳上は取れるようにするため)。
 export async function POST(req: NextRequest) {
   const ctx = await getAdminContext();
-  if (!ctx) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!ctx) return NextResponse.json({ error: "認証されていません" }, { status: 401 });
 
   const body = (await req.json()) as Body;
   const { menu_id, staff_id, starts_at, customer } = body;
@@ -39,12 +39,12 @@ export async function POST(req: NextRequest) {
     !optStr(customer.name_kana, 100) ||
     !optStr(customer.email, 254)
   ) {
-    return NextResponse.json({ error: "bad request" }, { status: 400 });
+    return NextResponse.json({ error: "リクエストが不正です" }, { status: 400 });
   }
 
   const menu = (await getMenus(ctx.salon.id)).find((m) => m.id === menu_id);
   if (!menu) {
-    return NextResponse.json({ error: "menu not found" }, { status: 404 });
+    return NextResponse.json({ error: "メニューが見つかりません" }, { status: 404 });
   }
 
   const db = createServiceClient();
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     .eq("salon_id", ctx.salon.id)
     .maybeSingle();
   if (!staff) {
-    return NextResponse.json({ error: "staff not found" }, { status: 404 });
+    return NextResponse.json({ error: "スタッフが見つかりません" }, { status: 404 });
   }
 
   let customerId: string;
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
 
   const start = new Date(starts_at);
   if (Number.isNaN(start.getTime())) {
-    return NextResponse.json({ error: "bad request" }, { status: 400 });
+    return NextResponse.json({ error: "リクエストが不正です" }, { status: 400 });
   }
   const end = new Date(
     start.getTime() + (menu.duration_minutes + menu.buffer_minutes) * 60_000

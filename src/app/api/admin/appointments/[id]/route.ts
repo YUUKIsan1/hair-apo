@@ -12,12 +12,12 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const ctx = await getAdminContext();
-  if (!ctx) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!ctx) return NextResponse.json({ error: "認証されていません" }, { status: 401 });
 
   const { id } = await params;
   const { status } = (await req.json()) as { status?: string };
   if (!status || !(STATUSES as readonly string[]).includes(status)) {
-    return NextResponse.json({ error: "bad request" }, { status: 400 });
+    return NextResponse.json({ error: "リクエストが不正です" }, { status: 400 });
   }
 
   const db = createServiceClient();
@@ -27,7 +27,7 @@ export async function PATCH(
     .eq("id", id)
     .maybeSingle();
   if (!appt || appt.salon_id !== ctx.salon.id) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return NextResponse.json({ error: "予約が見つかりません" }, { status: 404 });
   }
 
   const { error } = await db

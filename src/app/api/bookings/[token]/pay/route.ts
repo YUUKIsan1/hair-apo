@@ -18,7 +18,7 @@ export async function POST(
     .eq("manage_token", token)
     .maybeSingle();
   if (!appt || appt.status === "cancelled") {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return NextResponse.json({ error: "予約が見つかりません" }, { status: 404 });
   }
   if (appt.payment_mode !== "prepaid") {
     return NextResponse.json({ error: "事前決済の予約ではありません" }, { status: 400 });
