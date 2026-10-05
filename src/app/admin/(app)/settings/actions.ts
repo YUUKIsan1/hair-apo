@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAdminContext } from "@/lib/admin";
+import { newLinkCode } from "@/lib/line";
 import { createServiceClient } from "@/lib/supabase/server";
 
 type Result = { error?: string };
@@ -499,4 +500,46 @@ export async function uploadHeroImage(formData: FormData): Promise<Result> {
   revalidatePath("/admin/settings/design");
   revalidatePath(`/s/${ctx.salon.slug}`);
   return {};
+}
+
+// ---- LINE連携 ----
+
+// 連携コードを発行/再発行する。サロンはLINE公式アカウントに
+// このコードをトーク送信すると通知がLINEに届くようになる
+export async function issueLineLinkCode(): Promise<void> {
+  const ctx = await requireCtx();
+  if (!ctx) return;
+  const db = createServiceClient();
+  // 一意制約(部分ユニーク)に当たったら掛け直す
+  for (let i = 0; i < 3; i++) {
+    const { error } = await db
+      .from("salons")
+      .update({ line_link_code: newLinkCode() })
+      .eq("id", ctx.salon.id);
+    if (!error) {
+      revalidatePath("/admin/settings");
+      return;
+    }
+    if (error.code !== "23505") {
+      console.error(`[settings] issueLineLinkCode failed:`, error);
+      return;
+    }
+  }
+  console.error(`[settings] issueLineLinkCode exhausted retries`);
+}
+
+// LINE連携を解除する
+export async function unlinkLine(): Promise<void> {
+  const ctx = await requireCtx();
+  if (!ctx) return;
+  const db = createServiceClient();
+  const { error } = await db
+    .from("salons")
+    .update({ line_user_id: null })
+    .eq("id", ctx.salon.id);
+  if (error) {
+    console.error(`[settings] unlinkLine failed:`, error);
+    return;
+  }
+  revalidatePath("/admin/settings");
 }

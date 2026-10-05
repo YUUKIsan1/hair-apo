@@ -1,3 +1,4 @@
+import { lineEnabled, sendLinePush } from "@/lib/line";
 import { createServiceClient } from "@/lib/supabase/server";
 
 const FROM = process.env.EMAIL_FROM ?? "hair-apo <onboarding@resend.dev>";
@@ -46,11 +47,13 @@ interface MailData {
   salonPhone: string | null;
   salonAddress: string | null;
   notifyEmail: string | null;
+  salonLineUserId: string | null;
   menuName: string;
   price: number;
   staffName: string;
   customerName: string;
   customerEmail: string | null;
+  customerLineUserId: string | null;
   startsAt: string;
   manageToken: string;
 }
@@ -60,7 +63,7 @@ async function fetchMailData(apptId: string): Promise<MailData | null> {
   const { data, error } = await db
     .from("appointments")
     .select(
-      "starts_at, manage_token, salons(name, phone, address, notify_email), menus(name, price), staff(name), customers(name, email)"
+      "starts_at, manage_token, line_user_id, salons(name, phone, address, notify_email, line_user_id), menus(name, price), staff(name), customers(name, email)"
     )
     .eq("id", apptId)
     .single();
@@ -69,11 +72,13 @@ async function fetchMailData(apptId: string): Promise<MailData | null> {
   const r = data as unknown as {
     starts_at: string;
     manage_token: string;
+    line_user_id: string | null;
     salons: {
       name: string;
       phone: string | null;
       address: string | null;
       notify_email: string | null;
+      line_user_id: string | null;
     } | null;
     menus: { name: string; price: number } | null;
     staff: { name: string } | null;
@@ -85,11 +90,14 @@ async function fetchMailData(apptId: string): Promise<MailData | null> {
     salonPhone: r.salons.phone,
     salonAddress: r.salons.address,
     notifyEmail: r.salons.notify_email,
+    salonLineUserId: r.salons.line_user_id,
     menuName: r.menus.name,
     price: r.menus.price,
     staffName: r.staff.name,
     customerName: r.customers.name,
     customerEmail: r.customers.email,
+    // 顧客側のLINE連携は予約単位(appointments.line_user_id)
+    customerLineUserId: r.line_user_id,
     startsAt: r.starts_at,
     manageToken: r.manage_token,
   };
@@ -101,6 +109,57 @@ function shell(body: string): string {
 
 function row(label: string, value: string): string {
   return `<tr><td style="padding:4px 16px 4px 0;color:#78716c;white-space:nowrap;vertical-align:top">${label}</td><td style="padding:4px 0">${value}</td></tr>`;
+}
+
+// LINEはHTMLが使えないのでテキスト版を別途組み立てる
+function bookingLineText(
+  d: MailData,
+  kind: "confirmed" | "cancelled",
+  when: string,
+  manageUrl: string
+): string {
+  const head =
+    kind === "confirmed"
+      ? `【${d.salonName}】ご予約を確定しました`
+      : `【${d.salonName}】ご予約をキャンセルしました`;
+  const lines = [
+    head,
+    "",
+    `${d.customerName} 様`,
+    "",
+    kind === "confirmed"
+      ? "以下の内容でご予約を確定しました。"
+      : "以下のご予約をキャンセルしました。",
+    `店舗: ${d.salonName}`,
+    `日時: ${when}`,
+    `メニュー: ${d.menuName}`,
+    `担当: ${d.staffName}`,
+    `料金: ¥${d.price.toLocaleString("ja-JP")}(現地支払い)`,
+    ...(d.salonAddress ? [`住所: ${d.salonAddress}`] : []),
+    ...(d.salonPhone ? [`電話: ${d.salonPhone}`] : []),
+  ];
+  if (kind === "confirmed") {
+    lines.push("", `変更・キャンセルはこちら: ${manageUrl}`);
+  }
+  return lines.join("\n");
+}
+
+function salonLineText(
+  d: MailData,
+  kind: "confirmed" | "cancelled",
+  when: string
+): string {
+  const head =
+    kind === "confirmed" ? "【hair-apo】新規予約" : "【hair-apo】予約キャンセル";
+  return [
+    head,
+    "",
+    kind === "confirmed" ? "新しい予約が入りました。" : "予約がキャンセルされました。",
+    `日時: ${when}`,
+    `顧客: ${d.customerName}`,
+    `メニュー: ${d.menuName}`,
+    `担当: ${d.staffName}`,
+  ].join("\n");
 }
 
 /**
@@ -120,7 +179,16 @@ export async function notifyBooking(
     const manageUrl = `${opts.baseUrl}/booking/${d.manageToken}`;
     const tasks: Promise<unknown>[] = [];
 
-    if (opts.toCustomer !== false && d.customerEmail) {
+    // LINE連携済みならLINE優先(二重通知を避ける)。送信失敗時はメールに落とす
+    const sendToCustomer = async (): Promise<void> => {
+      if (d.customerLineUserId && lineEnabled()) {
+        const ok = await sendLinePush(
+          d.customerLineUserId,
+          bookingLineText(d, kind, when, manageUrl)
+        );
+        if (ok) return;
+      }
+      if (!d.customerEmail) return;
       const subject =
         kind === "confirmed"
           ? `【${d.salonName}】ご予約を確定しました`
@@ -147,10 +215,16 @@ export async function notifyBooking(
         }
         <p style="color:#78716c;font-size:12px">※ このメールは hair-apo から自動送信されています。</p>
       `);
-      tasks.push(sendEmail(d.customerEmail, subject, html));
-    }
+      await sendEmail(d.customerEmail!, subject, html);
+    };
+    if (opts.toCustomer !== false) tasks.push(sendToCustomer());
 
-    if (opts.toSalon !== false && d.notifyEmail) {
+    const sendToSalon = async (): Promise<void> => {
+      if (d.salonLineUserId && lineEnabled()) {
+        const ok = await sendLinePush(d.salonLineUserId, salonLineText(d, kind, when));
+        if (ok) return;
+      }
+      if (!d.notifyEmail) return;
       const subject =
         kind === "confirmed"
           ? `【hair-apo】新規予約: ${when}`
@@ -164,8 +238,9 @@ export async function notifyBooking(
           ${row("担当", esc(d.staffName))}
         </table>
       `);
-      tasks.push(sendEmail(d.notifyEmail, subject, html));
-    }
+      await sendEmail(d.notifyEmail!, subject, html);
+    };
+    if (opts.toSalon !== false) tasks.push(sendToSalon());
 
     await Promise.all(tasks);
   } catch (e) {
@@ -196,8 +271,8 @@ function tomorrowJstRange(): { from: string; to: string } {
 export async function sendBookingReminders(opts: {
   baseUrl: string;
 }): Promise<{ found: number; sent: number }> {
-  if (!process.env.RESEND_API_KEY) {
-    console.warn("[notify] RESEND_API_KEY 未設定のためリマインダーをスキップ");
+  if (!process.env.RESEND_API_KEY && !lineEnabled()) {
+    console.warn("[notify] 通知経路未設定のためリマインダーをスキップ");
     return { found: 0, sent: 0 };
   }
   const db = createServiceClient();
@@ -228,9 +303,33 @@ export async function sendBookingReminders(opts: {
 
     try {
       const d = await fetchMailData(id);
-      if (!d?.customerEmail) continue;
+      if (!d) continue;
       const when = fmtJst(d.startsAt);
       const manageUrl = `${opts.baseUrl}/booking/${d.manageToken}`;
+      // LINE連携済みならLINEのみ。未連携はメール
+      if (d.customerLineUserId && lineEnabled()) {
+        const lines = [
+          `【${d.salonName}】明日のご予約のお知らせ`,
+          "",
+          `${d.customerName} 様`,
+          "",
+          "明日のご予約をお知らせします。",
+          `店舗: ${d.salonName}`,
+          `日時: ${when}`,
+          `メニュー: ${d.menuName}`,
+          `担当: ${d.staffName}`,
+          ...(d.salonAddress ? [`住所: ${d.salonAddress}`] : []),
+          ...(d.salonPhone ? [`電話: ${d.salonPhone}`] : []),
+          "",
+          `変更・キャンセルはこちら: ${manageUrl}`,
+        ];
+        if (await sendLinePush(d.customerLineUserId, lines.join("\n"))) {
+          sent++;
+          continue;
+        }
+        // LINE送信失敗時はメールにフォールバック
+      }
+      if (!d.customerEmail) continue;
       const html = shell(`
         <p>${esc(d.customerName)} 様<br><br>明日のご予約をお知らせします。</p>
         <table style="margin:16px 0;border-collapse:collapse">
