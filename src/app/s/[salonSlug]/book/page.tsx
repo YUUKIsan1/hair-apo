@@ -12,10 +12,10 @@ export default async function BookPage({
   searchParams,
 }: {
   params: Promise<{ salonSlug: string }>;
-  searchParams: Promise<{ menu?: string }>;
+  searchParams: Promise<{ menu?: string; via?: string }>;
 }) {
   const { salonSlug } = await params;
-  const { menu: initialMenuId } = await searchParams;
+  const { menu: initialMenuId, via } = await searchParams;
   const salon = await getSalonBySlug(salonSlug);
   if (!salon) notFound();
 
@@ -46,6 +46,7 @@ export default async function BookPage({
       menus={menus}
       staffByMenu={Object.fromEntries(staffByMenu)}
       initialMenuId={initialMenuId ?? null}
+      channel={via === "mall" ? "mall" : "direct"}
     />
   );
 }

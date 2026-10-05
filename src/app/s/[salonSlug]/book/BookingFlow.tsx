@@ -17,6 +17,7 @@ interface Props {
   menus: Menu[];
   staffByMenu: Record<string, Staff[]>;
   initialMenuId: string | null;
+  channel: "direct" | "mall";
 }
 
 const DOW = ["日", "月", "火", "水", "木", "金", "土"];
@@ -34,7 +35,7 @@ function jstDate(offsetDays: number): string {
 
 const yen = (n: number) => `¥${n.toLocaleString("ja-JP")}`;
 
-export function BookingFlow({ salon, menus, staffByMenu, initialMenuId }: Props) {
+export function BookingFlow({ salon, menus, staffByMenu, initialMenuId, channel }: Props) {
   const [step, setStep] = useState<Step>(initialMenuId ? "staff" : "menu");
   const [menu, setMenu] = useState<Menu | null>(
     menus.find((m) => m.id === initialMenuId) ?? null
@@ -100,6 +101,7 @@ export function BookingFlow({ salon, menus, staffByMenu, initialMenuId }: Props)
         staff_id: staffId === "free" ? null : staffId,
         starts_at: slot.start,
         customer: form,
+        channel,
       }),
     });
     if (res.ok) {

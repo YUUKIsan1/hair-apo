@@ -25,12 +25,15 @@ interface BookingBody {
     email?: string;
     notes?: string;
   };
+  channel?: "direct" | "mall";
 }
 
 // POST /api/bookings — 空き枠即時確定
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as BookingBody;
   const { salon: slug, menu_id, staff_id, starts_at, customer } = body;
+  // モール経由の予約はモール料率で手数料を取る(請求集計もchannelで分かれる)
+  const channel = body.channel === "mall" ? "mall" : "direct";
   if (!slug || !menu_id || !starts_at || !customer?.name || !customer?.phone) {
     return NextResponse.json({ error: "リクエストが不正です" }, { status: 400 });
   }
@@ -159,7 +162,7 @@ export async function POST(req: NextRequest) {
         starts_at: start.toISOString(),
         ends_at: end.toISOString(),
         status: "confirmed",
-        channel: "direct",
+        channel,
         price: menu.price,
         customer_note: customer.notes?.trim() || null,
         payment_mode: usePrepaid ? "prepaid" : "on_site",
@@ -192,7 +195,10 @@ export async function POST(req: NextRequest) {
       salonName: salon.name,
       menuName: menu.name,
       price: menu.price,
-      feeBps: salon.fee_rate_direct_bps,
+      feeBps:
+        channel === "mall"
+          ? salon.fee_rate_mall_bps
+          : salon.fee_rate_direct_bps,
       destination: salon.stripe_account_id!,
       origin,
     });
