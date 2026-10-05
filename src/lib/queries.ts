@@ -27,11 +27,19 @@ export interface SalonWithMenus extends Salon {
 export async function getSalonsWithMenus(): Promise<SalonWithMenus[]> {
   const { data } = await supabase
     .from("salons")
-    .select("*, menus(name)")
+    .select("*, menus(name, is_active)")
     .order("name");
   return (data ?? []).map((s) => {
-    const row = s as unknown as Salon & { menus: { name: string }[] | null };
-    return { ...row, menuNames: (row.menus ?? []).map((m) => m.name) };
+    const row = s as unknown as Salon & {
+      menus: { name: string; is_active: boolean }[] | null;
+    };
+    // 非公開メニューは検索・表示から外す
+    return {
+      ...row,
+      menuNames: (row.menus ?? [])
+        .filter((m) => m.is_active)
+        .map((m) => m.name),
+    };
   });
 }
 
