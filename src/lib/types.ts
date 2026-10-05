@@ -81,6 +81,7 @@ export interface Customer {
   notes: string | null;
   line_user_id: string | null;
   line_link_code: string | null;
+  stripe_customer_id: string | null;
 }
 
 export interface Kart {
@@ -143,6 +144,8 @@ export interface Appointment {
   manage_token: string;
   line_user_id: string | null;
   line_link_code: string | null;
+  stripe_payment_method_id: string | null;
+  stripe_setup_session_id: string | null;
   reminder_sent_at: string | null;
   created_at: string;
 }

@@ -117,6 +117,7 @@ export async function createCheckoutSession(
 }
 
 // キャンセル時に未決済のCheckout Sessionを失効させ、後から支払えないようにする
+// (支払い用とカード登録用の両方のsessionを対象にする)
 export async function expirePendingCheckout(
   appointmentId: string
 ): Promise<void> {
@@ -130,11 +131,185 @@ export async function expirePendingCheckout(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (pay?.status !== "pending" || !pay.stripe_checkout_session_id) return;
+  const { data: appt } = await db
+    .from("appointments")
+    .select("stripe_setup_session_id, stripe_payment_method_id")
+    .eq("id", appointmentId)
+    .maybeSingle();
+  const sessionIds = [
+    pay?.status === "pending" ? pay.stripe_checkout_session_id : null,
+    // 登録済みなら新しいカード登録sessionは不要
+    appt?.stripe_payment_method_id ? null : appt?.stripe_setup_session_id,
+  ];
+  for (const sid of sessionIds) {
+    if (!sid) continue;
+    try {
+      await stripe.checkout.sessions.expire(sid);
+    } catch (e) {
+      console.error(`[stripe] expire failed for ${appointmentId}:`, e);
+    }
+  }
+}
+
+// card_on_file: 顧客のStripe Customerを(なければ作って)返す。
+// Customerはプラットフォームアカウント側に作成 — 事前決済と同じ
+// transfer_data方式で接続先サロンへ課金するため
+export async function ensureStripeCustomer(
+  customerId: string
+): Promise<string | null> {
+  const stripe = getStripe();
+  if (!stripe) return null;
+  const db = createServiceClient();
+  const { data: c } = await db
+    .from("customers")
+    .select("id, stripe_customer_id, name, email, phone")
+    .eq("id", customerId)
+    .maybeSingle();
+  if (!c) return null;
+  if (c.stripe_customer_id) return c.stripe_customer_id;
   try {
-    await stripe.checkout.sessions.expire(pay.stripe_checkout_session_id);
+    const sc = await stripe.customers.create({
+      name: c.name,
+      email: c.email ?? undefined,
+      phone: c.phone ?? undefined,
+      metadata: { customer_id: c.id },
+    });
+    await db
+      .from("customers")
+      .update({ stripe_customer_id: sc.id })
+      .eq("id", c.id);
+    return sc.id;
   } catch (e) {
-    console.error(`[stripe] expire failed for ${appointmentId}:`, e);
+    console.error(`[stripe] customer create failed:`, e);
+    return null;
+  }
+}
+
+// card_on_file: カード登録用のSetupモードCheckout Sessionを発行する。
+// 返り値は遷移先URL。登録されたカードはキャンセル料/ノーショー料の請求に使う
+export async function createCardSetupSession(a: {
+  appointmentId: string;
+  manageToken: string;
+  stripeCustomerId: string;
+  origin: string;
+}): Promise<string | null> {
+  const stripe = getStripe();
+  if (!stripe) return null;
+  const db = createServiceClient();
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: "setup",
+      currency: "jpy",
+      customer: a.stripeCustomerId,
+      payment_method_types: ["card"],
+      setup_intent_data: {
+        metadata: { appointment_id: a.appointmentId },
+      },
+      metadata: { appointment_id: a.appointmentId },
+      success_url: `${a.origin}/booking/${a.manageToken}?card=1`,
+      cancel_url: `${a.origin}/booking/${a.manageToken}`,
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+    });
+    // 旧setup sessionを失効させる。残すと古いsession経由の登録が
+    // webhookで最新か分からなくなる
+    const { data: appt } = await db
+      .from("appointments")
+      .select("stripe_setup_session_id")
+      .eq("id", a.appointmentId)
+      .maybeSingle();
+    if (
+      appt?.stripe_setup_session_id &&
+      appt.stripe_setup_session_id !== session.id
+    ) {
+      try {
+        await stripe.checkout.sessions.expire(appt.stripe_setup_session_id);
+      } catch (e) {
+        console.error("[stripe] old setup session expire failed:", e);
+      }
+    }
+    await db
+      .from("appointments")
+      .update({ stripe_setup_session_id: session.id })
+      .eq("id", a.appointmentId);
+    return session.url;
+  } catch (e) {
+    console.error("[stripe] card setup session failed:", e);
+    return null;
+  }
+}
+
+// card_on_file: 登録済みカードへキャンセル料/ノーショー料をオフセッション請求。
+// feeRateBps = サロンのキャンセル料率、appFeeBps = プラットフォーム手数料率。
+// payments行に記録するので台帳・請求と同じ場所で見える
+export async function chargeCardCancelFee(
+  appointmentId: string,
+  feeRateBps: number,
+  appFeeBps: number
+): Promise<void> {
+  const stripe = getStripe();
+  if (!stripe || feeRateBps <= 0) return;
+  const db = createServiceClient();
+  const { data: appt } = await db
+    .from("appointments")
+    .select(
+      "id, price, stripe_payment_method_id, customers(stripe_customer_id), salons(stripe_account_id)"
+    )
+    .eq("id", appointmentId)
+    .maybeSingle();
+  const cust = appt?.customers as unknown as {
+    stripe_customer_id: string | null;
+  } | null;
+  const salon = appt?.salons as unknown as {
+    stripe_account_id: string | null;
+  } | null;
+  if (
+    !appt?.stripe_payment_method_id ||
+    !cust?.stripe_customer_id ||
+    !salon?.stripe_account_id
+  ) {
+    return;
+  }
+  const amount = Math.floor(((appt.price ?? 0) * feeRateBps) / 10000);
+  if (amount <= 0) return;
+  const appFee = Math.floor((amount * appFeeBps) / 10000);
+  // 二重請求防止(客キャンセルとノーショー両方が走りうる)
+  const { data: existing } = await db
+    .from("payments")
+    .select("id")
+    .eq("appointment_id", appointmentId)
+    .in("status", ["succeeded", "pending"])
+    .limit(1)
+    .maybeSingle();
+  if (existing) return;
+  try {
+    const pi = await stripe.paymentIntents.create({
+      amount,
+      currency: "jpy",
+      customer: cust.stripe_customer_id,
+      payment_method: appt.stripe_payment_method_id,
+      off_session: true,
+      confirm: true,
+      application_fee_amount: appFee,
+      transfer_data: { destination: salon.stripe_account_id },
+      metadata: { appointment_id: appointmentId, kind: "cancel_fee" },
+    });
+    await db.from("payments").insert({
+      appointment_id: appointmentId,
+      amount,
+      application_fee_amount: appFee,
+      status: "succeeded",
+      stripe_payment_intent_id: pi.id,
+      paid_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    // 決済失敗(認証要求・残高不足等)も記録する。実際の回収は店舗判断
+    await db.from("payments").insert({
+      appointment_id: appointmentId,
+      amount,
+      application_fee_amount: appFee,
+      status: "failed",
+    });
+    console.error(`[stripe] cancel fee charge failed for ${appointmentId}:`, e);
   }
 }
 
