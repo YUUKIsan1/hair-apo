@@ -17,7 +17,7 @@ export default async function ManageBookingPage({
   const { data: appt } = await db
     .from("appointments")
     .select(
-      "id, starts_at, ends_at, status, customer_note, payment_mode, salons(name, slug, cancel_deadline_hours, cancel_fee_rate_bps), staff(name), menus(name, price, duration_minutes), customers(id, name, line_user_id, line_link_code), payments(status, cancel_fee_amount)"
+      "id, starts_at, ends_at, status, customer_note, payment_mode, line_user_id, line_link_code, salons(name, slug, cancel_deadline_hours, cancel_fee_rate_bps), staff(name), menus(name, price, duration_minutes), customers(name), payments(status, cancel_fee_amount)"
     )
     .eq("manage_token", token)
     .maybeSingle();
@@ -35,12 +35,7 @@ export default async function ManageBookingPage({
     price: number;
     duration_minutes: number;
   };
-  const customer = appt.customers as unknown as {
-    id: string;
-    name: string;
-    line_user_id: string | null;
-    line_link_code: string | null;
-  };
+  const customer = appt.customers as unknown as { name: string };
   const payment = (
     appt.payments as unknown as
       | { status: string; cancel_fee_amount: number }[]
@@ -93,13 +88,22 @@ export default async function ManageBookingPage({
       : undefined;
 
   // 連携コードが未発行ならこの表示で発行する(何度出しても同じ効果)。
-  // キャンセル済みではカードを出さないので発行自体もしない
-  if (!cancelled && !customer.line_user_id && !customer.line_link_code) {
-    customer.line_link_code = newLinkCode();
-    await db
-      .from("customers")
-      .update({ line_link_code: customer.line_link_code })
-      .eq("id", customer.id);
+  // キャンセル済みではカードを出さないので発行自体もしない。
+  // コードは予約単位 — manage_tokenを持つ本人だけが通知先を決められる
+  let lineLinkCode = appt.line_link_code;
+  if (!cancelled && !appt.line_user_id && !lineLinkCode) {
+    // 一意制約に当たったら掛け直す(衝突自体はほぼ起きない)
+    for (let i = 0; i < 3 && !lineLinkCode; i++) {
+      const candidate = newLinkCode();
+      const { data: updated } = await db
+        .from("appointments")
+        .update({ line_link_code: candidate })
+        .eq("id", appt.id)
+        .is("line_link_code", null)
+        .select("id")
+        .maybeSingle();
+      if (updated) lineLinkCode = candidate;
+    }
   }
   const addFriendUrl = process.env.LINE_ADD_FRIEND_URL;
 
@@ -142,23 +146,25 @@ export default async function ManageBookingPage({
       {!cancelled && (
         <section className="mt-10 rounded-lg border hairline bg-card p-5">
           <h2 className="text-sm font-bold">LINEで通知を受け取る</h2>
-          {customer.line_user_id ? (
+          {appt.line_user_id ? (
             <p className="mt-2 text-[13px] text-emerald-700">
               連携済み — この予約のお知らせはLINEに届きます。
             </p>
           ) : (
             <div className="mt-2 space-y-3 text-[13px]">
               <p className="text-[var(--color-mute)]">
-                hair-apoのLINE公式アカウントと友だちになり、下のコードをトークに送ると、予約の確定・変更・リマインダーがLINEに届きます。
+                hair-apoのLINE公式アカウントと友だちになり、下のコードをトークに送ると、この予約の確定・変更・リマインダーがLINEに届きます。
               </p>
-              <div className="rounded-lg border hairline bg-paper p-3 text-center">
-                <p className="text-[12px] text-[var(--color-mute)]">
-                  このコードをLINEトークに送信してください
-                </p>
-                <p className="mt-1 text-lg font-bold tracking-widest">
-                  C-{customer.line_link_code}
-                </p>
-              </div>
+              {lineLinkCode && (
+                <div className="rounded-lg border hairline bg-paper p-3 text-center">
+                  <p className="text-[12px] text-[var(--color-mute)]">
+                    このコードをLINEトークに送信してください
+                  </p>
+                  <p className="mt-1 text-lg font-bold tracking-widest">
+                    C-{lineLinkCode}
+                  </p>
+                </div>
+              )}
               {addFriendUrl && (
                 <a
                   href={addFriendUrl}

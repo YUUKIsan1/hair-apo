@@ -8,11 +8,11 @@ export function lineEnabled(): boolean {
   return Boolean(process.env.LINE_CHANNEL_ACCESS_TOKEN);
 }
 
-// 連携コード。紛らわしい文字を除いた6文字(I,O,0,1は除外)
+// 連携コード。紛らわしい文字を除いた8文字(I,O,0,1は除外)
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 export function newLinkCode(): string {
   let s = "";
-  const buf = crypto.getRandomValues(new Uint8Array(6));
+  const buf = crypto.getRandomValues(new Uint8Array(8));
   for (const b of buf) s += CODE_ALPHABET[b % CODE_ALPHABET.length];
   return s;
 }

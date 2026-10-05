@@ -141,6 +141,8 @@ export interface Appointment {
   customer_note: string | null;
   price: number | null;
   manage_token: string;
+  line_user_id: string | null;
+  line_link_code: string | null;
   reminder_sent_at: string | null;
   created_at: string;
 }

@@ -63,7 +63,7 @@ async function fetchMailData(apptId: string): Promise<MailData | null> {
   const { data, error } = await db
     .from("appointments")
     .select(
-      "starts_at, manage_token, salons(name, phone, address, notify_email, line_user_id), menus(name, price), staff(name), customers(name, email, line_user_id)"
+      "starts_at, manage_token, line_user_id, salons(name, phone, address, notify_email, line_user_id), menus(name, price), staff(name), customers(name, email)"
     )
     .eq("id", apptId)
     .single();
@@ -72,6 +72,7 @@ async function fetchMailData(apptId: string): Promise<MailData | null> {
   const r = data as unknown as {
     starts_at: string;
     manage_token: string;
+    line_user_id: string | null;
     salons: {
       name: string;
       phone: string | null;
@@ -81,7 +82,7 @@ async function fetchMailData(apptId: string): Promise<MailData | null> {
     } | null;
     menus: { name: string; price: number } | null;
     staff: { name: string } | null;
-    customers: { name: string; email: string | null; line_user_id: string | null } | null;
+    customers: { name: string; email: string | null } | null;
   };
   if (!r.salons || !r.menus || !r.staff || !r.customers) return null;
   return {
@@ -95,7 +96,8 @@ async function fetchMailData(apptId: string): Promise<MailData | null> {
     staffName: r.staff.name,
     customerName: r.customers.name,
     customerEmail: r.customers.email,
-    customerLineUserId: r.customers.line_user_id,
+    // 顧客側のLINE連携は予約単位(appointments.line_user_id)
+    customerLineUserId: r.line_user_id,
     startsAt: r.starts_at,
     manageToken: r.manage_token,
   };
@@ -177,10 +179,16 @@ export async function notifyBooking(
     const manageUrl = `${opts.baseUrl}/booking/${d.manageToken}`;
     const tasks: Promise<unknown>[] = [];
 
-    // LINE連携済みならLINEのみ(二重通知を避ける)。未連携は従来のメール
-    if (opts.toCustomer !== false && d.customerLineUserId && lineEnabled()) {
-      tasks.push(sendLinePush(d.customerLineUserId, bookingLineText(d, kind, when, manageUrl)));
-    } else if (opts.toCustomer !== false && d.customerEmail) {
+    // LINE連携済みならLINE優先(二重通知を避ける)。送信失敗時はメールに落とす
+    const sendToCustomer = async (): Promise<void> => {
+      if (d.customerLineUserId && lineEnabled()) {
+        const ok = await sendLinePush(
+          d.customerLineUserId,
+          bookingLineText(d, kind, when, manageUrl)
+        );
+        if (ok) return;
+      }
+      if (!d.customerEmail) return;
       const subject =
         kind === "confirmed"
           ? `【${d.salonName}】ご予約を確定しました`
@@ -207,12 +215,16 @@ export async function notifyBooking(
         }
         <p style="color:#78716c;font-size:12px">※ このメールは hair-apo から自動送信されています。</p>
       `);
-      tasks.push(sendEmail(d.customerEmail, subject, html));
-    }
+      await sendEmail(d.customerEmail!, subject, html);
+    };
+    if (opts.toCustomer !== false) tasks.push(sendToCustomer());
 
-    if (opts.toSalon !== false && d.salonLineUserId && lineEnabled()) {
-      tasks.push(sendLinePush(d.salonLineUserId, salonLineText(d, kind, when)));
-    } else if (opts.toSalon !== false && d.notifyEmail) {
+    const sendToSalon = async (): Promise<void> => {
+      if (d.salonLineUserId && lineEnabled()) {
+        const ok = await sendLinePush(d.salonLineUserId, salonLineText(d, kind, when));
+        if (ok) return;
+      }
+      if (!d.notifyEmail) return;
       const subject =
         kind === "confirmed"
           ? `【hair-apo】新規予約: ${when}`
@@ -226,8 +238,9 @@ export async function notifyBooking(
           ${row("担当", esc(d.staffName))}
         </table>
       `);
-      tasks.push(sendEmail(d.notifyEmail, subject, html));
-    }
+      await sendEmail(d.notifyEmail!, subject, html);
+    };
+    if (opts.toSalon !== false) tasks.push(sendToSalon());
 
     await Promise.all(tasks);
   } catch (e) {
@@ -312,8 +325,9 @@ export async function sendBookingReminders(opts: {
         ];
         if (await sendLinePush(d.customerLineUserId, lines.join("\n"))) {
           sent++;
+          continue;
         }
-        continue;
+        // LINE送信失敗時はメールにフォールバック
       }
       if (!d.customerEmail) continue;
       const html = shell(`

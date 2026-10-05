@@ -510,15 +510,22 @@ export async function issueLineLinkCode(): Promise<void> {
   const ctx = await requireCtx();
   if (!ctx) return;
   const db = createServiceClient();
-  const { error } = await db
-    .from("salons")
-    .update({ line_link_code: newLinkCode() })
-    .eq("id", ctx.salon.id);
-  if (error) {
-    console.error(`[settings] issueLineLinkCode failed:`, error);
-    return;
+  // 一意制約(部分ユニーク)に当たったら掛け直す
+  for (let i = 0; i < 3; i++) {
+    const { error } = await db
+      .from("salons")
+      .update({ line_link_code: newLinkCode() })
+      .eq("id", ctx.salon.id);
+    if (!error) {
+      revalidatePath("/admin/settings");
+      return;
+    }
+    if (error.code !== "23505") {
+      console.error(`[settings] issueLineLinkCode failed:`, error);
+      return;
+    }
   }
-  revalidatePath("/admin/settings");
+  console.error(`[settings] issueLineLinkCode exhausted retries`);
 }
 
 // LINE連携を解除する

@@ -41,10 +41,11 @@ export async function POST(req: NextRequest) {
       } else if (ev.type === "unfollow") {
         await db.from("salons").update({ line_user_id: null }).eq("line_user_id", userId);
         await db.from("customers").update({ line_user_id: null }).eq("line_user_id", userId);
+        await db.from("appointments").update({ line_user_id: null }).eq("line_user_id", userId);
       } else if (ev.type === "message" && ev.message?.type === "text") {
         const text = (ev.message.text ?? "").trim().toUpperCase();
-        const salonMatch = /^S-([0-9A-Z]{6})$/.exec(text);
-        const customerMatch = /^C-([0-9A-Z]{6})$/.exec(text);
+        const salonMatch = /^S-([0-9A-Z]{6,8})$/.exec(text);
+        const customerMatch = /^C-([0-9A-Z]{6,8})$/.exec(text);
         if (salonMatch) {
           const { data: salon } = await db
             .from("salons")
@@ -61,8 +62,10 @@ export async function POST(req: NextRequest) {
             );
           }
         } else if (customerMatch) {
-          const { data: customer } = await db
-            .from("customers")
+          // 顧客側の連携は予約単位。コードは予約確認ページで発行されたもので、
+          // manage_tokenを持つ本人だけが取得できる
+          const { data: appt } = await db
+            .from("appointments")
             .update({ line_user_id: userId, line_link_code: null })
             .eq("line_link_code", customerMatch[1])
             .select("id")
@@ -70,8 +73,8 @@ export async function POST(req: NextRequest) {
           if (ev.replyToken) {
             await sendLineReply(
               ev.replyToken,
-              customer
-                ? "連携が完了しました。予約の確定・変更・リマインダーをLINEでお知らせします。"
+              appt
+                ? "連携が完了しました。この予約の確定・変更・リマインダーをLINEでお知らせします。"
                 : "その連携コードは無効です。予約確認ページで最新のコードをご確認ください。"
             );
           }
