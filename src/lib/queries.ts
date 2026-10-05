@@ -19,6 +19,30 @@ export async function getSalons(): Promise<Salon[]> {
   return data ?? [];
 }
 
+// モール検索用: 各サロンのメニュー名も一緒に取る
+export interface SalonWithMenus extends Salon {
+  menuNames: string[];
+}
+
+export async function getSalonsWithMenus(): Promise<SalonWithMenus[]> {
+  const { data } = await supabase
+    .from("salons")
+    .select("*, menus(name, is_active)")
+    .order("name");
+  return (data ?? []).map((s) => {
+    const row = s as unknown as Salon & {
+      menus: { name: string; is_active: boolean }[] | null;
+    };
+    // 非公開メニューは検索・表示から外す
+    return {
+      ...row,
+      menuNames: (row.menus ?? [])
+        .filter((m) => m.is_active)
+        .map((m) => m.name),
+    };
+  });
+}
+
 export async function getSalonBySlug(slug: string): Promise<Salon | null> {
   const { data } = await supabase
     .from("salons")

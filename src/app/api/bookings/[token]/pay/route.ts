@@ -13,7 +13,7 @@ export async function POST(
   const { data: appt } = await db
     .from("appointments")
     .select(
-      "id, status, payment_mode, manage_token, salons(name, stripe_account_id, stripe_onboarded, fee_rate_direct_bps), menus(name, price), payments(status)"
+      "id, status, payment_mode, manage_token, channel, salons(name, stripe_account_id, stripe_onboarded, fee_rate_direct_bps, fee_rate_mall_bps), menus(name, price), payments(status)"
     )
     .eq("manage_token", token)
     .maybeSingle();
@@ -28,6 +28,7 @@ export async function POST(
     stripe_account_id: string | null;
     stripe_onboarded: boolean;
     fee_rate_direct_bps: number;
+    fee_rate_mall_bps: number;
   } | null;
   const menu = appt.menus as unknown as { name: string; price: number } | null;
   if (!salon?.stripe_account_id || !menu) {
@@ -44,7 +45,10 @@ export async function POST(
     salonName: salon.name,
     menuName: menu.name,
     price: menu.price,
-    feeBps: salon.fee_rate_direct_bps,
+    feeBps:
+      appt.channel === "mall"
+        ? salon.fee_rate_mall_bps
+        : salon.fee_rate_direct_bps,
     destination: salon.stripe_account_id,
     origin: new URL(req.url).origin,
   });

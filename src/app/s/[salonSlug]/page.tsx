@@ -19,12 +19,17 @@ const ROLE_LABEL: Record<string, string> = {
 
 export default async function SalonPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ salonSlug: string }>;
+  searchParams: Promise<{ via?: string }>;
 }) {
   const { salonSlug } = await params;
+  const { via } = await searchParams;
   const salon = await getSalonBySlug(salonSlug);
   if (!salon) notFound();
+  // モール経由の流入は予約時にchannel=mallとして記録する
+  const viaSuffix = via === "mall" ? "&via=mall" : "";
 
   const [staff, menus, hours] = await Promise.all([
     getStaffList(salon.id),
@@ -134,7 +139,7 @@ export default async function SalonPage({
                   </span>
                 </p>
                 <Link
-                  href={`/s/${salon.slug}/book?menu=${m.id}`}
+                  href={`/s/${salon.slug}/book?menu=${m.id}${viaSuffix}`}
                   className="shrink-0 rounded-md bg-[var(--salon-accent)] px-4 py-1.5 text-[13px] font-medium text-white transition hover:opacity-85"
                 >
                   予約
@@ -232,7 +237,7 @@ export default async function SalonPage({
             <p className="text-[11px] text-[var(--color-mute)]">Web予約 24時間受付</p>
           </div>
           <Link
-            href={`/s/${salon.slug}/book`}
+            href={`/s/${salon.slug}/book${via === "mall" ? "?via=mall" : ""}`}
             className="rounded-lg bg-[var(--salon-accent)] px-6 py-3 text-[14px] font-medium text-white transition hover:opacity-85"
           >
             予約する
