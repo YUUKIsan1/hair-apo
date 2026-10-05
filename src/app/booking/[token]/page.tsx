@@ -95,7 +95,9 @@ export default async function ManageBookingPage({
           : `${deadlineH}時間前までキャンセルできます。以降のキャンセルは店舗へ直接ご連絡ください。`;
   const feeWarning =
     pastDeadline && chargeableCancel
-      ? `キャンセル料として ${yen(Math.floor((menu.price * salon.cancel_fee_rate_bps) / 10000))} が差し引かれます。`
+      ? appt.payment_mode === "card_on_file"
+        ? `キャンセル料として ${yen(Math.floor((menu.price * salon.cancel_fee_rate_bps) / 10000))} が登録カードに請求されます。`
+        : `キャンセル料として ${yen(Math.floor((menu.price * salon.cancel_fee_rate_bps) / 10000))} が差し引かれます。`
       : undefined;
 
   // 連携コードが未発行ならこの表示で発行する(何度出しても同じ効果)。
