@@ -92,8 +92,9 @@ export default async function ManageBookingPage({
       ? `キャンセル料として ${yen(Math.floor((menu.price * salon.cancel_fee_rate_bps) / 10000))} が差し引かれます。`
       : undefined;
 
-  // 連携コードが未発行ならこの表示で発行する(何度出しても同じ効果)
-  if (!customer.line_user_id && !customer.line_link_code) {
+  // 連携コードが未発行ならこの表示で発行する(何度出しても同じ効果)。
+  // キャンセル済みではカードを出さないので発行自体もしない
+  if (!cancelled && !customer.line_user_id && !customer.line_link_code) {
     customer.line_link_code = newLinkCode();
     await db
       .from("customers")
