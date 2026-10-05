@@ -154,7 +154,9 @@ export default async function ManageBookingPage({
         ))}
       </dl>
 
-      {!cancelled && payment?.status === "pending" && <PayButton token={token} />}
+      {!cancelled &&
+        appt.payment_mode === "prepaid" &&
+        payment?.status === "pending" && <PayButton token={token} />}
 
       {!cancelled &&
         appt.payment_mode === "card_on_file" &&

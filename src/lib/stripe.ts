@@ -272,15 +272,50 @@ export async function chargeCardCancelFee(
   const amount = Math.floor(((appt.price ?? 0) * feeRateBps) / 10000);
   if (amount <= 0) return;
   const appFee = Math.floor((amount * appFeeBps) / 10000);
-  // 二重請求防止(客キャンセルとノーショー両方が走りうる)
+  // 二重請求防止: payments行は予約1件に1つ(unique index)。請求中を表す
+  // pending行を先に立てる — 同時実行はどちらかがinsert/updateに負けて戻る。
+  // succeeded=請求済み、pending=別処理が請求中、failed=前回失敗なので再利用
+  const now = new Date().toISOString();
   const { data: existing } = await db
     .from("payments")
-    .select("id")
+    .select("id, status")
     .eq("appointment_id", appointmentId)
-    .in("status", ["succeeded", "pending"])
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (existing) return;
+  if (existing && existing.status !== "failed") return;
+  let paymentId: string;
+  if (existing) {
+    // status=failed の行だけpendingへ(CAS)。別処理が先に取ったら0件で負ける
+    const { data: claimed } = await db
+      .from("payments")
+      .update({
+        status: "pending",
+        amount,
+        application_fee_amount: appFee,
+        updated_at: now,
+      })
+      .eq("id", existing.id)
+      .eq("status", "failed")
+      .select("id")
+      .maybeSingle();
+    if (!claimed) return;
+    paymentId = existing.id;
+  } else {
+    const { data: row, error } = await db
+      .from("payments")
+      .insert({
+        appointment_id: appointmentId,
+        amount,
+        application_fee_amount: appFee,
+        status: "pending",
+      })
+      .select("id")
+      .single();
+    // unique違反 = 同時に別の請求処理が走っている
+    if (error || !row) return;
+    paymentId = row.id;
+  }
   try {
     const pi = await stripe.paymentIntents.create({
       amount,
@@ -293,22 +328,21 @@ export async function chargeCardCancelFee(
       transfer_data: { destination: salon.stripe_account_id },
       metadata: { appointment_id: appointmentId, kind: "cancel_fee" },
     });
-    await db.from("payments").insert({
-      appointment_id: appointmentId,
-      amount,
-      application_fee_amount: appFee,
-      status: "succeeded",
-      stripe_payment_intent_id: pi.id,
-      paid_at: new Date().toISOString(),
-    });
+    await db
+      .from("payments")
+      .update({
+        status: "succeeded",
+        stripe_payment_intent_id: pi.id,
+        paid_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", paymentId);
   } catch (e) {
     // 決済失敗(認証要求・残高不足等)も記録する。実際の回収は店舗判断
-    await db.from("payments").insert({
-      appointment_id: appointmentId,
-      amount,
-      application_fee_amount: appFee,
-      status: "failed",
-    });
+    await db
+      .from("payments")
+      .update({ status: "failed", updated_at: new Date().toISOString() })
+      .eq("id", paymentId);
     console.error(`[stripe] cancel fee charge failed for ${appointmentId}:`, e);
   }
 }
@@ -325,11 +359,18 @@ export async function refundAppointment(
   const db = createServiceClient();
   const { data: pay } = await db
     .from("payments")
-    .select("id, stripe_payment_intent_id, status, amount, cancel_fee_amount")
+    .select(
+      "id, stripe_payment_intent_id, status, amount, cancel_fee_amount, appointments(payment_mode)"
+    )
     .eq("appointment_id", appointmentId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  // card_on_fileのpayments行はキャンセル料の「請求」行で返金対象ではない。
+  // ここで返すとcronの返金スイープが料金をまるごと客に返してしまう
+  const mode = (pay?.appointments as unknown as { payment_mode: string } | null)
+    ?.payment_mode;
+  if (mode === "card_on_file") return;
   if (!pay?.stripe_payment_intent_id || pay.status !== "succeeded") return;
   const fee =
     pay.cancel_fee_amount || Math.floor((pay.amount * feeRateBps) / 10000);
