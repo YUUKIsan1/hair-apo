@@ -14,6 +14,8 @@ export interface Salon {
   theme_color: string;
   hero_image_url: string | null;
   notify_email: string | null;
+  line_user_id: string | null;
+  line_link_code: string | null;
   stripe_account_id: string | null;
   stripe_onboarded: boolean;
   cancel_deadline_hours: number;
@@ -77,6 +79,8 @@ export interface Customer {
   email: string | null;
   phone: string | null;
   notes: string | null;
+  line_user_id: string | null;
+  line_link_code: string | null;
 }
 
 export interface Kart {
