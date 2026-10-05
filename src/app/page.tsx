@@ -17,6 +17,12 @@ export default function Home() {
           サロンを探す
         </Link>
       </div>
+      <p className="mt-6 text-xs text-[var(--color-mute)]">
+        サロンを運営されている方:
+        <Link href="/apply" className="underline underline-offset-2">
+          導入のお申し込み
+        </Link>
+      </p>
     </main>
   );
 }

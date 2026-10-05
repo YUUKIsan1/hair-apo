@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import LoginForm from "./LoginForm";
 
 export default function AdminLoginPage() {
@@ -8,7 +9,9 @@ export default function AdminLoginPage() {
           サロン管理ログイン
         </h1>
         <div className="mt-8 rounded-lg border hairline bg-card p-6">
-          <LoginForm />
+          <Suspense>
+            <LoginForm />
+          </Suspense>
         </div>
         <p className="mt-6 text-center text-xs text-mute">
           ログイン情報はサロン契約時に発行されます

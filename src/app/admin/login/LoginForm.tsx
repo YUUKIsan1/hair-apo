@@ -1,11 +1,12 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { createBrowser } from "@/lib/supabase/browser";
 
 export default function LoginForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +26,9 @@ export default function LoginForm() {
       setError("メールアドレスまたはパスワードが違います");
       return;
     }
-    router.push("/admin");
+    // /accept等からの遷移はnextに戻す(外部URLは弾く)
+    const next = params.get("next");
+    router.push(next?.startsWith("/") ? next : "/admin");
     router.refresh();
   }
 
