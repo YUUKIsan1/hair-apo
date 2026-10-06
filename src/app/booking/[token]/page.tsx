@@ -17,7 +17,7 @@ export default async function ManageBookingPage({
   const { data: appt } = await db
     .from("appointments")
     .select(
-      "id, starts_at, ends_at, status, customer_note, payment_mode, line_user_id, line_link_code, salons(name, slug, cancel_deadline_hours, cancel_fee_rate_bps), staff(name), menus(name, price, duration_minutes), customers(name), payments(status, cancel_fee_amount)"
+      "id, starts_at, ends_at, status, customer_note, payment_mode, line_user_id, line_link_code, stripe_payment_method_id, salons(name, slug, cancel_deadline_hours, cancel_fee_rate_bps), staff(name), menus(name, price, duration_minutes), customers(name), payments(status, cancel_fee_amount)"
     )
     .eq("manage_token", token)
     .maybeSingle();
@@ -43,19 +43,27 @@ export default async function ManageBookingPage({
   )?.[0];
   const yen = (n: number) => `¥${n.toLocaleString("ja-JP")}`;
   const payLabel =
-    payment?.status === "succeeded"
-      ? "事前決済済み"
-      : payment?.status === "pending"
-        ? "支払い待ち"
-        : payment?.status === "refunded"
-          ? payment.cancel_fee_amount > 0
-            ? payment.cancel_fee_amount >= menu.price
-              ? "キャンセル料として全額充当"
-              : `返金済み(キャンセル料 ${yen(payment.cancel_fee_amount)} を差引)`
-            : "返金済み"
-          : appt.payment_mode === "prepaid"
-            ? "支払い待ち"
-            : "現地払い";
+    appt.payment_mode === "card_on_file"
+      ? payment?.status === "succeeded"
+        ? "キャンセル料をお支払い済み"
+        : payment?.status === "failed"
+          ? "キャンセル料のお支払いに失敗しました"
+          : appt.stripe_payment_method_id
+            ? "カード登録済み(当日店舗払い)"
+            : "当日店舗払い(カード登録が必要)"
+      : payment?.status === "succeeded"
+        ? "事前決済済み"
+        : payment?.status === "pending"
+          ? "支払い待ち"
+          : payment?.status === "refunded"
+            ? payment.cancel_fee_amount > 0
+              ? payment.cancel_fee_amount >= menu.price
+                ? "キャンセル料として全額充当"
+                : `返金済み(キャンセル料 ${yen(payment.cancel_fee_amount)} を差引)`
+              : "返金済み"
+            : appt.payment_mode === "prepaid"
+              ? "支払い待ち"
+              : "現地払い";
 
   const start = new Date(appt.starts_at);
   const jst = new Date(start.getTime() + 9 * 3600_000);
@@ -67,24 +75,29 @@ export default async function ManageBookingPage({
   const feePct = salon.cancel_fee_rate_bps / 100;
   const pastDeadline =
     deadlineH > 0 && Date.now() > start.getTime() - deadlineH * 3600_000;
-  // キャンセル料を引けるのは入金済みのみ(API側も同じ条件)
+  // キャンセル料を取れるのは「課金手段がある」場合のみ(API側も同じ条件)
   const chargeableCancel =
-    appt.payment_mode === "prepaid" &&
     feePct > 0 &&
-    payment?.status === "succeeded";
+    ((appt.payment_mode === "prepaid" && payment?.status === "succeeded") ||
+      (appt.payment_mode === "card_on_file" &&
+        !!appt.stripe_payment_method_id));
   const policyText =
     deadlineH === 0
       ? "予約開始時刻までキャンセルできます。"
       : pastDeadline
         ? chargeableCancel
-          ? `キャンセル期限(${deadlineH}時間前)を過ぎています。キャンセルすると料金の${feePct}%がキャンセル料として差し引かれます。`
+          ? appt.payment_mode === "card_on_file"
+            ? `キャンセル期限(${deadlineH}時間前)を過ぎています。キャンセルすると料金の${feePct}%が登録カードからキャンセル料として請求されます。`
+            : `キャンセル期限(${deadlineH}時間前)を過ぎています。キャンセルすると料金の${feePct}%がキャンセル料として差し引かれます。`
           : `キャンセル期限(${deadlineH}時間前)を過ぎています。キャンセルは店舗へ直接ご連絡ください。`
         : chargeableCancel
           ? `${deadlineH}時間前までは無料でキャンセルできます。以降は料金の${feePct}%のキャンセル料がかかります。`
           : `${deadlineH}時間前までキャンセルできます。以降のキャンセルは店舗へ直接ご連絡ください。`;
   const feeWarning =
     pastDeadline && chargeableCancel
-      ? `キャンセル料として ${yen(Math.floor((menu.price * salon.cancel_fee_rate_bps) / 10000))} が差し引かれます。`
+      ? appt.payment_mode === "card_on_file"
+        ? `キャンセル料として ${yen(Math.floor((menu.price * salon.cancel_fee_rate_bps) / 10000))} が登録カードに請求されます。`
+        : `キャンセル料として ${yen(Math.floor((menu.price * salon.cancel_fee_rate_bps) / 10000))} が差し引かれます。`
       : undefined;
 
   // 連携コードが未発行ならこの表示で発行する(何度出しても同じ効果)。
@@ -141,7 +154,13 @@ export default async function ManageBookingPage({
         ))}
       </dl>
 
-      {!cancelled && payment?.status === "pending" && <PayButton token={token} />}
+      {!cancelled &&
+        appt.payment_mode === "prepaid" &&
+        payment?.status === "pending" && <PayButton token={token} />}
+
+      {!cancelled &&
+        appt.payment_mode === "card_on_file" &&
+        !appt.stripe_payment_method_id && <PayButton token={token} card />}
 
       {!cancelled && (
         <section className="mt-10 rounded-lg border hairline bg-card p-5">

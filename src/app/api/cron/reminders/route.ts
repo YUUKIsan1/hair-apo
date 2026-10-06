@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendBookingReminders } from "@/lib/notify";
-import { refundAppointment } from "@/lib/stripe";
+import { chargeCardCancelFee, refundAppointment } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 
 // GET /api/cron/reminders — 前日リマインダー+返金リトライ。Vercel Cron等から日1回呼ぶ
@@ -33,6 +33,17 @@ async function retryRefunds(): Promise<number> {
   let n = 0;
   for (const row of data ?? []) {
     await refundAppointment(row.appointment_id);
+    n++;
+  }
+  // card_on_fileの請求がpendingのまま残ったもの(成功後のDB保存失敗・
+  // 通信喪失)を拾う。冪等キーで同じPaymentIntentが返るので復旧になる
+  const { data: stale } = await db
+    .from("payments")
+    .select("appointment_id, appointments!inner(payment_mode)")
+    .eq("status", "pending")
+    .eq("appointments.payment_mode", "card_on_file");
+  for (const row of stale ?? []) {
+    await chargeCardCancelFee(row.appointment_id, 0, 0);
     n++;
   }
   return n;

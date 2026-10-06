@@ -10,7 +10,12 @@ import {
   getTimeOff,
 } from "@/lib/queries";
 import { notifyBooking } from "@/lib/notify";
-import { createCheckoutSession, getStripe } from "@/lib/stripe";
+import {
+  createCardSetupSession,
+  createCheckoutSession,
+  ensureStripeCustomer,
+  getStripe,
+} from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 
 interface BookingBody {
@@ -135,12 +140,12 @@ export async function POST(req: NextRequest) {
     start.getTime() + (menu.duration_minutes + menu.buffer_minutes) * 60_000
   );
 
-  // 事前決済はサロンがStripe連携済みのときだけ。未連携なら現地払いに落とす
-  const usePrepaid =
-    menu.payment_mode === "prepaid" &&
-    !!salon.stripe_account_id &&
-    salon.stripe_onboarded &&
-    !!getStripe();
+  // 事前決済/カード登録はサロンがStripe連携済みのときだけ。
+  // 未連携なら現地払いに落とす
+  const stripeReady =
+    !!salon.stripe_account_id && salon.stripe_onboarded && !!getStripe();
+  const usePrepaid = menu.payment_mode === "prepaid" && stripeReady;
+  const useCardOnFile = menu.payment_mode === "card_on_file" && stripeReady;
 
   // フリーは先に埋まったスタッフで409にならないよう、他の候補で順に試す
   const tryOrder = [...slot.staffIds].sort(() => Math.random() - 0.5);
@@ -165,7 +170,11 @@ export async function POST(req: NextRequest) {
         channel,
         price: menu.price,
         customer_note: customer.notes?.trim() || null,
-        payment_mode: usePrepaid ? "prepaid" : "on_site",
+        payment_mode: usePrepaid
+          ? "prepaid"
+          : useCardOnFile
+            ? "card_on_file"
+            : "on_site",
       })
       .select("id, manage_token, staff_id, starts_at, ends_at")
       .single();
@@ -188,6 +197,26 @@ export async function POST(req: NextRequest) {
   await notifyBooking(appt.id, "confirmed", { baseUrl: origin });
 
   let checkoutUrl: string | null = null;
+  if (useCardOnFile) {
+    // カード登録メニュー: 決済は当日なので登録導線だけ用意する。
+    // 登録をサボられても予約自体は確定のまま(キャンセル料が取れないだけ)
+    const stripeCustomerId = await ensureStripeCustomer(customerId);
+    if (stripeCustomerId) {
+      checkoutUrl = await createCardSetupSession({
+        appointmentId: appt.id,
+        manageToken: appt.manage_token,
+        stripeCustomerId,
+        origin,
+      });
+    }
+    if (!checkoutUrl) {
+      // 登録sessionを発行できなければ現地払いに落とす
+      await db
+        .from("appointments")
+        .update({ payment_mode: "on_site", updated_at: new Date().toISOString() })
+        .eq("id", appt.id);
+    }
+  }
   if (usePrepaid) {
     checkoutUrl = await createCheckoutSession({
       appointmentId: appt.id,
