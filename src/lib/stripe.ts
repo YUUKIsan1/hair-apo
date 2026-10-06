@@ -167,18 +167,24 @@ export async function ensureStripeCustomer(
     .maybeSingle();
   if (!c) return null;
   if (c.stripe_customer_id?.startsWith("cus_")) return c.stripe_customer_id;
-  // 並行してStripe Customerを二重作成しないよう、"creating" を先に書いて
-  // 作成権を取る(負けた側は実IDが入るまで待つ)。書けなかったCustomerは
-  // 孤児になるとカードの登録先とDBが食い違って請求に失敗するため
+  // 並行してStripe Customerを二重作成しないよう、所有者トークン+期限付きの
+  // 印を先に書いて作成権を取る。印は "creating:<uuid>:<期限ms>" で、引継ぎと
+  // 最終IDの保存はすべて印の値に対するCASなので、作成権を持つのは
+  // 常に1処理だけ。書けなかったCustomerは孤児になるとカードの登録先と
+  // DBが食い違って請求に失敗するため
+  const mkToken = () =>
+    `creating:${crypto.randomUUID()}:${Date.now() + 15000}`;
+  let token = mkToken();
   const { data: claimed } = await db
     .from("customers")
-    .update({ stripe_customer_id: "creating" })
+    .update({ stripe_customer_id: token })
     .eq("id", c.id)
     .is("stripe_customer_id", null)
     .select("id")
     .maybeSingle();
   if (!claimed) {
     // 他の処理が作成中(またはさっき完成した)。実IDが入るまで待つ
+    let held: string | null = null;
     for (let i = 0; i < 10; i++) {
       await new Promise((r) => setTimeout(r, 300));
       const { data: again } = await db
@@ -189,13 +195,18 @@ export async function ensureStripeCustomer(
       if (again?.stripe_customer_id?.startsWith("cus_")) {
         return again.stripe_customer_id;
       }
+      held = again?.stripe_customer_id ?? null;
     }
-    // "creating"が残ったまま = 途中で落ちた可能性。引き継いで作り直す
+    // 期限内の印は所有者がまだ生きている可能性があるので引き継がない。
+    // 期限切れだけ見た値全体に対するCASで取る — 並行する引継ぎは1つだけ成功
+    if (!held?.startsWith("creating:")) return null;
+    if (Number(held.split(":")[2]) > Date.now()) return null;
+    token = mkToken();
     const { data: stole } = await db
       .from("customers")
-      .update({ stripe_customer_id: "creating" })
+      .update({ stripe_customer_id: token })
       .eq("id", c.id)
-      .eq("stripe_customer_id", "creating")
+      .eq("stripe_customer_id", held)
       .select("id")
       .maybeSingle();
     if (!stole) return null;
@@ -207,26 +218,33 @@ export async function ensureStripeCustomer(
       phone: c.phone ?? undefined,
       metadata: { customer_id: c.id },
     });
-    const { error } = await db
+    // 最終IDの保存も作成権のCAS — 印を引き継がれた(または失効した)場合は
+    // 書けず、作ったCustomerは孤児になるが DB側は別のIDで一貫する
+    const { data: saved } = await db
       .from("customers")
       .update({ stripe_customer_id: sc.id })
-      .eq("id", c.id);
-    if (error) {
-      // 保存失敗で孤児Customerになるので印を戻して次回に任せる
-      await db
+      .eq("id", c.id)
+      .eq("stripe_customer_id", token)
+      .select("id")
+      .maybeSingle();
+    if (!saved) {
+      const { data: again } = await db
         .from("customers")
-        .update({ stripe_customer_id: null })
-        .eq("id", c.id);
-      console.error(`[stripe] customer id save failed: ${error.message}`);
-      return null;
+        .select("stripe_customer_id")
+        .eq("id", c.id)
+        .maybeSingle();
+      return again?.stripe_customer_id?.startsWith("cus_")
+        ? again.stripe_customer_id
+        : null;
     }
     return sc.id;
   } catch (e) {
+    // 自分の印だけ戻す(引継ぎ済みなら触らない)
     await db
       .from("customers")
       .update({ stripe_customer_id: null })
       .eq("id", c.id)
-      .eq("stripe_customer_id", "creating");
+      .eq("stripe_customer_id", token);
     console.error(`[stripe] customer create failed:`, e);
     return null;
   }
@@ -319,7 +337,7 @@ export async function chargeCardCancelFee(
   const now = new Date().toISOString();
   const { data: existing } = await db
     .from("payments")
-    .select("id, status, amount, application_fee_amount")
+    .select("id, status, amount, application_fee_amount, stripe_payment_intent_id")
     .eq("appointment_id", appointmentId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -327,15 +345,59 @@ export async function chargeCardCancelFee(
   let paymentId: string;
   let amount: number;
   let appFee: number;
+  let pi: Stripe.PaymentIntent | null = null;
+  let lookupFailed = false;
   if (existing) {
     // succeeded=請求済み、failed=カード拒否の確定失敗でここで終わる。
-    // pendingは「請求中」か「成功後のDB保存や通信で中断した残り」。
-    // 同じ冪等キーで作り直せばStripe側は同じPaymentIntentを返すので、
-    // 再実行がそのまま台帳の復旧になる(二重請求にはならない)
+    // pendingは「請求中」か「成功後のDB保存や通信で中断した残り」
     if (existing.status !== "pending") return;
     paymentId = existing.id;
     amount = existing.amount;
     appFee = existing.application_fee_amount;
+    // 冪等キーはStripe側で長くは保持されない(〜24h)ので、古いpendingへの
+    // 再実行は新しい請求になりうる。先に元のPaymentIntentを照合し、
+    // 見つかればその状態で台帳を復旧、見つからなければ未課金と分かるので
+    // 新規作成してよい。照合自体が失敗した場合は課金済みか不明なので
+    // 新しい請求は出さない
+    if (existing.stripe_payment_intent_id) {
+      try {
+        pi = await stripe.paymentIntents.retrieve(
+          existing.stripe_payment_intent_id
+        );
+      } catch {
+        lookupFailed = true;
+      }
+    }
+    if (!pi && !lookupFailed) {
+      try {
+        const res = await stripe.paymentIntents.search({
+          query: `metadata['appointment_id']:'${appointmentId}'`,
+          limit: 1,
+        });
+        pi = res.data[0] ?? null;
+      } catch {
+        // searchが使えない環境では顧客の履歴から探す。こちらは
+        // 別Customer作の請求を拾えないので、見つからない=不明として扱う
+        try {
+          const res = await stripe.paymentIntents.list({
+            customer: cust.stripe_customer_id,
+            limit: 100,
+          });
+          const found = res.data.find(
+            (p) => p.metadata?.appointment_id === appointmentId
+          );
+          if (found) {
+            pi = found;
+          } else {
+            lookupFailed = true;
+          }
+        } catch {
+          lookupFailed = true;
+        }
+      }
+    }
+    // 元の請求の有無が不明なまま新しい課金リクエストは出さない
+    if (!pi && lookupFailed) return;
   } else {
     if (feeRateBps <= 0) return;
     amount = Math.floor(((appt.price ?? 0) * feeRateBps) / 10000);
@@ -357,40 +419,55 @@ export async function chargeCardCancelFee(
     paymentId = row.id;
   }
   try {
-    // 予約単位の冪等キー: 応答喪失後の再試行や並行実行でも
-    // Stripe側は同じ請求として1回しか課金しない
-    const pi = await stripe.paymentIntents.create(
-      {
-        amount,
-        currency: "jpy",
-        customer: cust.stripe_customer_id,
-        payment_method: appt.stripe_payment_method_id,
-        off_session: true,
-        confirm: true,
-        application_fee_amount: appFee,
-        transfer_data: { destination: salon.stripe_account_id },
-        metadata: { appointment_id: appointmentId, kind: "cancel_fee" },
-      },
-      { idempotencyKey: `cancel-fee-${appointmentId}` }
-    );
-    const { error } = await db
-      .from("payments")
-      .update({
-        status: "succeeded",
-        stripe_payment_intent_id: pi.id,
-        paid_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", paymentId);
-    if (error) {
-      console.error(
-        `[stripe] payment row update failed for ${appointmentId}: ${error.message}`
+    if (!pi) {
+      // 予約単位の冪等キー: 応答喪失直後の再試行や並行実行でも
+      // Stripe側は同じ請求として1回しか課金しない
+      pi = await stripe.paymentIntents.create(
+        {
+          amount,
+          currency: "jpy",
+          customer: cust.stripe_customer_id,
+          payment_method: appt.stripe_payment_method_id,
+          off_session: true,
+          confirm: true,
+          application_fee_amount: appFee,
+          transfer_data: { destination: salon.stripe_account_id },
+          metadata: { appointment_id: appointmentId, kind: "cancel_fee" },
+        },
+        { idempotencyKey: `cancel-fee-${appointmentId}` }
       );
     }
+    // 照合で拾った未確定の請求だけ確定する(create側はconfirm済みで返る)
+    if (pi.status === "requires_confirmation") {
+      pi = await stripe.paymentIntents.confirm(pi.id);
+    }
+    const isOk =
+      pi.status === "succeeded" || pi.status === "requires_capture";
+    const isFailed =
+      pi.status === "requires_payment_method" ||
+      pi.status === "requires_action" ||
+      pi.status === "canceled";
+    if (isOk || isFailed) {
+      const { error } = await db
+        .from("payments")
+        .update({
+          status: isOk ? "succeeded" : "failed",
+          stripe_payment_intent_id: pi.id,
+          ...(isOk ? { paid_at: now } : {}),
+          updated_at: now,
+        })
+        .eq("id", paymentId);
+      if (error) {
+        console.error(
+          `[stripe] payment row update failed for ${appointmentId}: ${error.message}`
+        );
+      }
+    }
+    // processing等の判断不能な状態はpendingのまま残して次のスイープで再照合
   } catch (e) {
     // カード拒否だけは確定失敗としてfailedに倒す。通信喪失など
     // 結果不明のエラーはpendingのまま残し、次の呼び出し(cronの
-    // スイープや再実行)が同じ冪等キーで結果を拾って復旧する
+    // スイープや再実行)が元のPaymentIntentを照合して復旧する
     if ((e as { type?: string }).type === "StripeCardError") {
       await db
         .from("payments")
