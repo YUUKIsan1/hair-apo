@@ -60,6 +60,8 @@ export async function createCheckoutSession(
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      // paypayも選べる。支払い方法はStripeダッシュボード側の有効化も必要
+      payment_method_types: ["card", "paypay"],
       line_items: [
         {
           quantity: 1,

@@ -129,7 +129,7 @@ function MenuEditor({
             className={input}
           >
             <option value="on_site">現地払い</option>
-            <option value="prepaid">事前カード決済</option>
+            <option value="prepaid">事前決済(カード/PayPay)</option>
           </select>
         </div>
         <div>
