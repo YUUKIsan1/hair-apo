@@ -34,9 +34,9 @@ function MenuEditor({
   const [duration, setDuration] = useState(menu?.duration_minutes ?? 60);
   const [buffer, setBuffer] = useState(menu?.buffer_minutes ?? 15);
   const [sortOrder, setSortOrder] = useState(menu?.sort_order ?? 0);
-  const [paymentMode, setPaymentMode] = useState<"on_site" | "prepaid">(
-    menu?.payment_mode === "prepaid" ? "prepaid" : "on_site"
-  );
+  const [paymentMode, setPaymentMode] = useState<
+    "on_site" | "prepaid" | "card_on_file"
+  >(menu?.payment_mode === "prepaid" || menu?.payment_mode === "card_on_file" ? menu.payment_mode : "on_site");
   const [staff, setStaff] = useState<StaffPick[]>(picks);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,12 +124,15 @@ function MenuEditor({
           <select
             value={paymentMode}
             onChange={(e) =>
-              setPaymentMode(e.target.value as "on_site" | "prepaid")
+              setPaymentMode(
+                e.target.value as "on_site" | "prepaid" | "card_on_file"
+              )
             }
             className={input}
           >
             <option value="on_site">現地払い</option>
             <option value="prepaid">事前決済(カード/PayPay)</option>
+            <option value="card_on_file">カード登録(当日払い・キャンセル料あり)</option>
           </select>
         </div>
         <div>
@@ -260,6 +263,7 @@ export default function MenuList({
                   {yen(m.price)} / {m.duration_minutes}分
                   {m.buffer_minutes > 0 && `(+バッファ${m.buffer_minutes}分)`}
                   {m.payment_mode === "prepaid" && "・事前決済"}
+                  {m.payment_mode === "card_on_file" && "・カード登録制"}
                 </p>
               </div>
               <button

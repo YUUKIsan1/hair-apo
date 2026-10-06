@@ -194,7 +194,7 @@ export async function upsertMenu(input: {
   duration_minutes: number;
   buffer_minutes: number;
   sort_order: number;
-  payment_mode: "on_site" | "prepaid";
+  payment_mode: "on_site" | "prepaid" | "card_on_file";
   staff: { staff_id: string; nominable: boolean }[];
 }): Promise<Result> {
   const ctx = await requireCtx();
@@ -203,7 +203,11 @@ export async function upsertMenu(input: {
   if (input.price < 0 || input.duration_minutes <= 0 || input.buffer_minutes < 0) {
     return { error: "価格・所要時間が不正です" };
   }
-  if (input.payment_mode !== "on_site" && input.payment_mode !== "prepaid") {
+  if (
+    input.payment_mode !== "on_site" &&
+    input.payment_mode !== "prepaid" &&
+    input.payment_mode !== "card_on_file"
+  ) {
     return { error: "決済方法が不正です" };
   }
   if (input.staff.length === 0) {

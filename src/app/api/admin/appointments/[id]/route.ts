@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminContext } from "@/lib/admin";
 import { notifyBooking } from "@/lib/notify";
-import { expirePendingCheckout, refundAppointment } from "@/lib/stripe";
+import {
+  chargeCardCancelFee,
+  expirePendingCheckout,
+  refundAppointment,
+} from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 
 const STATUSES = ["confirmed", "cancelled", "completed", "no_show"] as const;
@@ -23,7 +27,7 @@ export async function PATCH(
   const db = createServiceClient();
   const { data: appt } = await db
     .from("appointments")
-    .select("id, salon_id, status")
+    .select("id, salon_id, status, channel")
     .eq("id", id)
     .maybeSingle();
   if (!appt || appt.salon_id !== ctx.salon.id) {
@@ -57,6 +61,12 @@ export async function PATCH(
   }
   if (status === "no_show") {
     await refundAppointment(id, ctx.salon.cancel_fee_rate_bps);
+    // card_on_fileは返金ではなく登録カードからキャンセル料を請求する
+    const appFeeBps =
+      appt.channel === "mall"
+        ? ctx.salon.fee_rate_mall_bps
+        : ctx.salon.fee_rate_direct_bps;
+    await chargeCardCancelFee(id, ctx.salon.cancel_fee_rate_bps, appFeeBps);
   }
   return NextResponse.json({ ok: true });
 }

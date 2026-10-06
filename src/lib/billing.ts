@@ -32,7 +32,8 @@ export async function bookingFeeItems(
     .select("id, channel, price, menus(price)")
     .eq("salon_id", salonId)
     .eq("status", "completed")
-    .eq("payment_mode", "on_site")
+    // card_on_fileも当日は店舗払いなので手数料請求の対象
+    .in("payment_mode", ["on_site", "card_on_file"])
     .in("channel", ["direct", "mall"])
     .gte("starts_at", from)
     .lt("starts_at", to);

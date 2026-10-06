@@ -27,6 +27,33 @@ export async function POST(req: NextRequest) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
+      // card_on_fileのカード登録完了: SetupIntentから支払い方法を取って
+      // 予約に保存する(この時点では課金しない)
+      if (session.mode === "setup") {
+        const si =
+          typeof session.setup_intent === "string"
+            ? session.setup_intent
+            : (session.setup_intent?.id ?? null);
+        const appointmentId = session.metadata?.appointment_id;
+        if (si && appointmentId) {
+          const intent = await stripe.setupIntents.retrieve(si);
+          const pm =
+            typeof intent.payment_method === "string"
+              ? intent.payment_method
+              : (intent.payment_method?.id ?? null);
+          if (pm) {
+            const { error } = await db
+              .from("appointments")
+              .update({ stripe_payment_method_id: pm, updated_at: now })
+              .eq("id", appointmentId);
+            if (error) {
+              console.error(`[webhook] card save failed: ${error.message}`);
+              return NextResponse.json({ error: "更新に失敗しました" }, { status: 500 });
+            }
+          }
+        }
+        break;
+      }
       const pi =
         typeof session.payment_intent === "string"
           ? session.payment_intent
