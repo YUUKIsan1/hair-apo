@@ -9,7 +9,7 @@ import {
   todayJst,
   yen,
 } from "@/lib/format";
-import { getStaffList } from "@/lib/queries";
+import { getBusinessHours, getMenus, getStaffList } from "@/lib/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import StatusActions from "./StatusActions";
 
@@ -73,7 +73,7 @@ export default async function AdminLedgerPage({
   const prevM = monthRangeUtc(py, pm);
   const nowIso = new Date().toISOString();
 
-  const [staffList, { data: appointments }, monthAppts, futureCount] =
+  const [staffList, { data: appointments }, monthAppts, futureCount, menus, hours] =
     await Promise.all([
       getStaffList(ctx.salon.id),
       db
@@ -100,7 +100,13 @@ export default async function AdminLedgerPage({
         .eq("salon_id", ctx.salon.id)
         .eq("status", "confirmed")
         .gte("starts_at", nowIso),
+      getMenus(ctx.salon.id),
+      getBusinessHours(ctx.salon.id),
     ]);
+
+  // 予約を受け付けるのに必須の設定が揃っていなければウィザードへ誘導
+  const setupMissing =
+    hours.length === 0 || staffList.length === 0 || menus.length === 0;
 
   // 月次集計(完了=売上計上、確定=今後の入り、キャンセル+ノーショー=欠損)
   interface MonthRow {
@@ -184,6 +190,20 @@ export default async function AdminLedgerPage({
           </form>
         </div>
       </div>
+
+      {setupMissing && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+          <span>
+            初期設定が未完了です — 営業時間・スタッフ・メニューを設定すると予約を受け付けられます。
+          </span>
+          <Link
+            href="/admin/setup"
+            className="rounded-md bg-ink px-3 py-1.5 text-paper"
+          >
+            設定ウィザードへ
+          </Link>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <section className="rounded-lg border hairline bg-card p-3.5">

@@ -76,13 +76,13 @@ export default function AcceptClient({ token }: { token: string }) {
           {state.salonName
             ? `「${state.salonName}」の有効化が完了しました。`
             : "有効化が完了しました。"}
-          管理画面で営業時間・スタッフ・メニューを設定すると予約を受け付けられます。
+          営業時間・スタッフ・メニューを設定すると予約を受け付けられます。
         </p>
         <Link
-          href="/admin"
+          href="/admin/setup"
           className="inline-block rounded-lg bg-ink px-4 py-2.5 text-paper"
         >
-          管理画面へ
+          初期設定をはじめる
         </Link>
       </div>
     );
