@@ -161,6 +161,27 @@ export async function upsertStaff(input: {
         return { error: smErr.message };
       }
     }
+    // シフトが1件も無いスタッフは予約枠が0件になるので、
+    // 営業時間と同じ週間シフトを初期値として入れておく。
+    // 個別の勤務時間はシフト設定であとから調整する前提
+    const { data: bh } = await db
+      .from("business_hours")
+      .select("day_of_week, start_time, end_time")
+      .eq("salon_id", ctx.salon.id);
+    if (bh && bh.length > 0) {
+      const { error: shErr } = await db.from("shifts").insert(
+        bh.map((h) => ({
+          staff_id: created.id,
+          day_of_week: h.day_of_week,
+          start_time: h.start_time,
+          end_time: h.end_time,
+        }))
+      );
+      if (shErr) {
+        await db.from("staff").delete().eq("id", created.id);
+        return { error: shErr.message };
+      }
+    }
   }
   revalidatePath("/admin/settings/staff");
   revalidatePath(`/s/${ctx.salon.slug}`);
