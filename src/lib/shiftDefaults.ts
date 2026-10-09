@@ -13,19 +13,21 @@ export async function seedUnconfiguredShifts(
   salonId: string,
   hours: { day_of_week: number; start_time: string; end_time: string }[]
 ): Promise<Result> {
-  const { data: targets } = await db
+  const { data: targets, error: tErr } = await db
     .from("staff")
     .select("id")
     .eq("salon_id", salonId)
     .eq("shifts_configured", false);
+  if (tErr) return { error: tErr.message };
   const ids = (targets ?? []).map((t) => t.id);
   if (ids.length === 0 || hours.length === 0) return {};
 
-  const { data: have } = await db
+  const { data: have, error: hErr } = await db
     .from("shifts")
     .select("staff_id")
     .in("staff_id", ids)
     .not("day_of_week", "is", null);
+  if (hErr) return { error: hErr.message };
   const haveSet = new Set((have ?? []).map((s) => s.staff_id));
   const seed = ids
     .filter((id) => !haveSet.has(id))

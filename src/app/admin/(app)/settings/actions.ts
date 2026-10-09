@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { getAdminContext } from "@/lib/admin";
 import { newLinkCode } from "@/lib/line";
-import { seedUnconfiguredShifts } from "@/lib/shiftDefaults";
 import { createServiceClient } from "@/lib/supabase/server";
 
 type Result = { error?: string };
@@ -99,12 +98,9 @@ export async function saveBusinessHours(
   const { error: delErr } = await del;
   if (delErr) return { error: delErr.message };
 
-  // 営業時間より先に作られた(=シフト未設定の)スタッフへの補完。
-  // 意図的に「全曜日休み」にしたスタッフは上書きしない
-  if (rows.length > 0) {
-    const r = await seedUnconfiguredShifts(db, ctx.salon.id, rows);
-    if (r.error) return r;
-  }
+  // 営業時間の保存でシフトを自動補完はしない。
+  // 移行前からシフト0件のスタッフは意図的な休みか判別できないため、
+  // 未設定スタッフへの補完は新規作成時とウィザードの明示操作のみで行う
 
   revalidatePath("/admin/settings/hours");
   revalidatePath(`/s/${ctx.salon.slug}`);
