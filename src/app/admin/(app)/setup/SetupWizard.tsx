@@ -252,15 +252,20 @@ export default function SetupWizard({
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              const open = hours.filter((r) => r.open);
+              // 全曜日休みで保存しても成功するが予約枠は0件になるので
+              // ウィザードでは1日以上の営業日を必須にする
+              if (open.length === 0) {
+                setError("最低1日の営業日を設定してください");
+                return;
+              }
               run(async () => {
                 const res = await saveBusinessHours(
-                  hours
-                    .filter((r) => r.open)
-                    .map((r) => ({
-                      day_of_week: r.day_of_week,
-                      start_time: r.start_time,
-                      end_time: r.end_time,
-                    }))
+                  open.map((r) => ({
+                    day_of_week: r.day_of_week,
+                    start_time: r.start_time,
+                    end_time: r.end_time,
+                  }))
                 );
                 if (!res.error) setHoursDone(true);
                 return res;

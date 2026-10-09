@@ -97,6 +97,40 @@ export async function saveBusinessHours(
   }
   const { error: delErr } = await del;
   if (delErr) return { error: delErr.message };
+
+  // 営業時間より先に作られた(=初期シフトが無い)スタッフへの補完。
+  // 週間シフトが1件も無いスタッフは予約枠が0件になるので、
+  // ここで営業時間と同じ初期シフトを入れる
+  if (rows.length > 0) {
+    const { data: staff } = await db
+      .from("staff")
+      .select("id")
+      .eq("salon_id", ctx.salon.id);
+    const staffIds = (staff ?? []).map((s) => s.id);
+    if (staffIds.length > 0) {
+      const { data: have } = await db
+        .from("shifts")
+        .select("staff_id")
+        .in("staff_id", staffIds)
+        .not("day_of_week", "is", null);
+      const haveSet = new Set((have ?? []).map((s) => s.staff_id));
+      const seed = staffIds
+        .filter((id) => !haveSet.has(id))
+        .flatMap((id) =>
+          rows.map((r) => ({
+            staff_id: id,
+            day_of_week: r.day_of_week,
+            start_time: r.start_time,
+            end_time: r.end_time,
+          }))
+        );
+      if (seed.length > 0) {
+        const { error: seedErr } = await db.from("shifts").insert(seed);
+        if (seedErr) return { error: seedErr.message };
+      }
+    }
+  }
+
   revalidatePath("/admin/settings/hours");
   revalidatePath(`/s/${ctx.salon.slug}`);
   return {};
