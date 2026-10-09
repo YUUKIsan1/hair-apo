@@ -15,7 +15,7 @@ export default async function SetupPage() {
     getBusinessHours(ctx.salon.id),
     db
       .from("staff")
-      .select("id, name, role")
+      .select("id, name, role, shifts_configured")
       .eq("salon_id", ctx.salon.id)
       .eq("is_active", true)
       .order("sort_order"),

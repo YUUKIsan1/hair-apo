@@ -8,7 +8,7 @@ import {
   upsertMenu,
   upsertStaff,
 } from "../settings/actions";
-import { getActiveStaff } from "./actions";
+import { getActiveStaff, seedStaffShifts } from "./actions";
 import type { BusinessHours, Staff } from "@/lib/types";
 
 const input =
@@ -48,16 +48,32 @@ export default function SetupWizard({
   slug: string;
   salon: SalonFields;
   initialHours: BusinessHours[];
-  initialStaff: { id: string; name: string; role: Staff["role"] }[];
+  initialStaff: {
+    id: string;
+    name: string;
+    role: Staff["role"];
+    shifts_configured: boolean;
+  }[];
   initialMenus: { id: string; name: string; price: number }[];
 }) {
   const [hoursDone, setHoursDone] = useState(initialHours.length > 0);
   const [staffList, setStaffList] = useState(initialStaff);
   const [menus, setMenus] = useState(initialMenus);
+  // シフトを一度も設定していないスタッフ(予約枠が0件になる)
+  const [unshifted, setUnshifted] = useState(
+    () =>
+      new Set(
+        initialStaff.filter((s) => !s.shifts_configured).map((s) => s.id)
+      )
+  );
   // 最初の未完了ステップから始める(全部済みなら完了画面)
   const [step, setStep] = useState(() => {
     if (initialHours.length === 0) return 1;
-    if (initialStaff.length === 0) return 2;
+    if (
+      initialStaff.length === 0 ||
+      initialStaff.some((s) => !s.shifts_configured)
+    )
+      return 2;
     if (initialMenus.length === 0) return 3;
     return 4;
   });
@@ -117,11 +133,34 @@ export default function SetupWizard({
       return;
     }
     // 一覧表示用(メニューの担当割当は保存時に有効スタッフを取り直す)
+    // 営業時間があれば初期シフト込みで作成される。無ければ未設定として数える
+    const pid = `new-${staffList.length}`;
     setStaffList([
       ...staffList,
-      { id: `new-${staffList.length}`, name: staffName, role: staffRole },
+      {
+        id: pid,
+        name: staffName,
+        role: staffRole,
+        shifts_configured: hoursDone,
+      },
     ]);
+    if (!hoursDone) setUnshifted(new Set(unshifted).add(pid));
     setStaffName("");
+  }
+
+  async function seedShifts() {
+    setBusy(true);
+    setError(null);
+    const res = await seedStaffShifts();
+    setBusy(false);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
+    setUnshifted(new Set());
+    setStaffList(
+      staffList.map((s) => ({ ...s, shifts_configured: true }))
+    );
   }
 
   // ---- メニュー ----
@@ -161,7 +200,10 @@ export default function SetupWizard({
   }
 
   const allDone =
-    hoursDone && staffList.length > 0 && menus.length > 0;
+    hoursDone &&
+    staffList.length > 0 &&
+    unshifted.size === 0 &&
+    menus.length > 0;
 
   return (
     <div>
@@ -322,6 +364,28 @@ export default function SetupWizard({
 
         {step === 2 && (
           <div className="space-y-4">
+            {unshifted.size > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+                <p>
+                  シフトが未設定のスタッフがいます —
+                  このままではそのスタッフの予約枠が出ません。
+                </p>
+                {hoursDone ? (
+                  <button
+                    type="button"
+                    onClick={seedShifts}
+                    disabled={busy}
+                    className={`${btnSub} mt-2`}
+                  >
+                    {busy ? "設定中…" : "営業時間と同じシフトを自動設定"}
+                  </button>
+                ) : (
+                  <p className="mt-1 text-xs text-mute">
+                    先に営業時間のステップで営業時間を保存してください。
+                  </p>
+                )}
+              </div>
+            )}
             {staffList.length > 0 && (
               <ul className="divide-y hairline rounded-lg border hairline">
                 {staffList.map((s) => (
@@ -373,11 +437,15 @@ export default function SetupWizard({
               error={error}
               next="次へ"
               onNext={() => setStep(3)}
-              nextDisabled={staffList.length === 0}
+              nextDisabled={
+                staffList.length === 0 || unshifted.size > 0
+              }
               hint={
                 staffList.length === 0
                   ? "1人以上追加してください"
-                  : undefined
+                  : unshifted.size > 0
+                    ? "上のボタンでシフトを設定するか、あとからシフト設定で登録してください"
+                    : undefined
               }
             />
           </div>
@@ -490,6 +558,12 @@ export default function SetupWizard({
             )}
             {staffList.length === 0 && (
               <p className="text-red-700">スタッフが未登録です。</p>
+            )}
+            {unshifted.size > 0 && (
+              <p className="text-red-700">
+                シフトが未設定のスタッフがいます —
+                スタッフのステップで自動設定できます。
+              </p>
             )}
             {menus.length === 0 && (
               <p className="text-red-700">メニューが未登録です。</p>

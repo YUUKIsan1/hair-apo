@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getAdminContext } from "@/lib/admin";
 import { newLinkCode } from "@/lib/line";
+import { seedUnconfiguredShifts } from "@/lib/shiftDefaults";
 import { createServiceClient } from "@/lib/supabase/server";
 
 type Result = { error?: string };
@@ -98,37 +99,11 @@ export async function saveBusinessHours(
   const { error: delErr } = await del;
   if (delErr) return { error: delErr.message };
 
-  // 営業時間より先に作られた(=初期シフトが無い)スタッフへの補完。
-  // 週間シフトが1件も無いスタッフは予約枠が0件になるので、
-  // ここで営業時間と同じ初期シフトを入れる
+  // 営業時間より先に作られた(=シフト未設定の)スタッフへの補完。
+  // 意図的に「全曜日休み」にしたスタッフは上書きしない
   if (rows.length > 0) {
-    const { data: staff } = await db
-      .from("staff")
-      .select("id")
-      .eq("salon_id", ctx.salon.id);
-    const staffIds = (staff ?? []).map((s) => s.id);
-    if (staffIds.length > 0) {
-      const { data: have } = await db
-        .from("shifts")
-        .select("staff_id")
-        .in("staff_id", staffIds)
-        .not("day_of_week", "is", null);
-      const haveSet = new Set((have ?? []).map((s) => s.staff_id));
-      const seed = staffIds
-        .filter((id) => !haveSet.has(id))
-        .flatMap((id) =>
-          rows.map((r) => ({
-            staff_id: id,
-            day_of_week: r.day_of_week,
-            start_time: r.start_time,
-            end_time: r.end_time,
-          }))
-        );
-      if (seed.length > 0) {
-        const { error: seedErr } = await db.from("shifts").insert(seed);
-        if (seedErr) return { error: seedErr.message };
-      }
-    }
+    const r = await seedUnconfiguredShifts(db, ctx.salon.id, rows);
+    if (r.error) return r;
   }
 
   revalidatePath("/admin/settings/hours");
@@ -215,6 +190,11 @@ export async function upsertStaff(input: {
         await db.from("staff").delete().eq("id", created.id);
         return { error: shErr.message };
       }
+      const { error: cfErr } = await db
+        .from("staff")
+        .update({ shifts_configured: true })
+        .eq("id", created.id);
+      if (cfErr) return { error: cfErr.message };
     }
   }
   revalidatePath("/admin/settings/staff");
@@ -399,6 +379,12 @@ export async function saveShifts(
       .in("id", oldShifts.map((s) => s.id));
     if (delErr) return { error: delErr.message };
   }
+  // 保存件数0(=全曜日休み)も「意図的な設定」として記録する
+  const { error: cfErr } = await db
+    .from("staff")
+    .update({ shifts_configured: true })
+    .eq("id", staffId);
+  if (cfErr) return { error: cfErr.message };
   revalidatePath("/admin/settings/shifts");
   return {};
 }

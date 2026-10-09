@@ -104,9 +104,13 @@ export default async function AdminLedgerPage({
       getBusinessHours(ctx.salon.id),
     ]);
 
-  // 予約を受け付けるのに必須の設定が揃っていなければウィザードへ誘導
+  // 予約を受け付けるのに必須の設定が揃っていなければウィザードへ誘導。
+  // シフト未設定のスタッフがいると予約枠が0件になるのでそれも未完了とする
   const setupMissing =
-    hours.length === 0 || staffList.length === 0 || menus.length === 0;
+    hours.length === 0 ||
+    staffList.length === 0 ||
+    staffList.some((s) => !s.shifts_configured) ||
+    menus.length === 0;
 
   // 月次集計(完了=売上計上、確定=今後の入り、キャンセル+ノーショー=欠損)
   interface MonthRow {
