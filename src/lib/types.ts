@@ -31,6 +31,7 @@ export interface Staff {
   bio: string | null;
   is_active: boolean;
   sort_order: number;
+  shifts_configured: boolean;
 }
 
 export interface Menu {

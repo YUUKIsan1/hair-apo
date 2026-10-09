@@ -97,6 +97,11 @@ export async function saveBusinessHours(
   }
   const { error: delErr } = await del;
   if (delErr) return { error: delErr.message };
+
+  // 営業時間の保存でシフトを自動補完はしない。
+  // 移行前からシフト0件のスタッフは意図的な休みか判別できないため、
+  // 未設定スタッフへの補完は新規作成時とウィザードの明示操作のみで行う
+
   revalidatePath("/admin/settings/hours");
   revalidatePath(`/s/${ctx.salon.slug}`);
   return {};
@@ -160,6 +165,32 @@ export async function upsertStaff(input: {
         await db.from("staff").delete().eq("id", created.id);
         return { error: smErr.message };
       }
+    }
+    // シフトが1件も無いスタッフは予約枠が0件になるので、
+    // 営業時間と同じ週間シフトを初期値として入れておく。
+    // 個別の勤務時間はシフト設定であとから調整する前提
+    const { data: bh } = await db
+      .from("business_hours")
+      .select("day_of_week, start_time, end_time")
+      .eq("salon_id", ctx.salon.id);
+    if (bh && bh.length > 0) {
+      const { error: shErr } = await db.from("shifts").insert(
+        bh.map((h) => ({
+          staff_id: created.id,
+          day_of_week: h.day_of_week,
+          start_time: h.start_time,
+          end_time: h.end_time,
+        }))
+      );
+      if (shErr) {
+        await db.from("staff").delete().eq("id", created.id);
+        return { error: shErr.message };
+      }
+      const { error: cfErr } = await db
+        .from("staff")
+        .update({ shifts_configured: true })
+        .eq("id", created.id);
+      if (cfErr) return { error: cfErr.message };
     }
   }
   revalidatePath("/admin/settings/staff");
@@ -344,6 +375,12 @@ export async function saveShifts(
       .in("id", oldShifts.map((s) => s.id));
     if (delErr) return { error: delErr.message };
   }
+  // 保存件数0(=全曜日休み)も「意図的な設定」として記録する
+  const { error: cfErr } = await db
+    .from("staff")
+    .update({ shifts_configured: true })
+    .eq("id", staffId);
+  if (cfErr) return { error: cfErr.message };
   revalidatePath("/admin/settings/shifts");
   return {};
 }
